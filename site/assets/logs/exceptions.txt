@@ -1,0 +1,1 @@
+2025-03-15 20:47:25	rootadmin	https://pw.frameless.at/cms/module/	SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry 'InputfieldRockIcons' for key 'modules.class' (in /wire/core/WireDatabasePDOStatement.php line 168)

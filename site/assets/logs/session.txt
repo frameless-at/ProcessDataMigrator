@@ -1,0 +1,5 @@
+2025-03-15 20:42:44	rootadmin	https://pw.frameless.at/cms/login/	Successful login for 'rootadmin'
+2025-03-15 20:48:35	rootadmin	https://pw.frameless.at/cms/login/logout/	Logout for 'rootadmin'
+2025-03-15 20:48:37	rootadmin	https://pw.frameless.at/cms/login/	Successful login for 'rootadmin'
+2025-03-15 21:27:59	rootadmin	https://pw.frameless.at/cms/login/logout/	Logout for 'rootadmin'
+2025-03-15 21:28:02	rootadmin	https://pw.frameless.at/cms/login/	Successful login for 'rootadmin'
