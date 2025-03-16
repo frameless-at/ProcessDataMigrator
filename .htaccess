@@ -476,9 +476,6 @@ DirectoryIndex index.php index.html index.htm
 
 </IfModule>
 
-RewriteEngine On
-RewriteCond %{SERVER_PORT} !=443
-RewriteRule ^(.*)$ https://hsv-wien.at/$1 [R=301,L]
 
 #################################################################################################
 # END PROCESSWIRE HTACCESS DIRECTIVES

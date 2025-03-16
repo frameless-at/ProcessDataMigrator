@@ -53,11 +53,11 @@ $config->templateCompile = false;
  */
 $config->dbHost = 'localhost';
 $config->dbName = 'db1132669-pw2';
-$config->dbUser = 'db1132669-pw2';
-$config->dbPass = 'db1132669-pw2';
+$config->dbUser = 'michaelkozak';
+$config->dbPass = '';
 $config->dbPort = '3306';
 $config->dbCharset = 'utf8mb4';
-$config->dbEngine = 'InnoDB';
+$config->dbEngine = 'MariaDB';
 
 /**
  * Installer: User Authentication Salt 
