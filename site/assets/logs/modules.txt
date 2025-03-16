@@ -10,3 +10,5 @@
 2025-03-15 21:17:43	rootadmin	https://pw.frameless.at/cms/module/edit?name=RockIcons&collapse_info=1	Uninstalled module 'RockIcons'
 2025-03-15 21:17:48	rootadmin	https://pw.frameless.at/cms/module/	Installed module 'InputfieldRockIcons'
 2025-03-15 21:17:48	rootadmin	https://pw.frameless.at/cms/module/	Installed module 'RockIcons'
+2025-03-16 01:20:56	rootadmin	http://pw.frameless.at/cms/module/	Installed module 'Less'
+2025-03-16 01:20:56	rootadmin	http://pw.frameless.at/cms/module/edit?name=Less	Installed module 'InputfieldToggle'
