@@ -1,1 +1,0 @@
-<?php // Created by ProcessWire - Do not delete this file. The existence of this file indicates the site is confirmed active and first-time use errors may be suppressed. Installed at: [/is/htdocs/wp1132669_W0DIHNEIOC/pw/]
