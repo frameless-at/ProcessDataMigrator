@@ -80,7 +80,10 @@ class TemplateCreator extends WireData {
                 $field->required = 1;
             }
 
-            // Type-specific configuration
+            // Save field first (required before setting options)
+            $field->save();
+
+            // Type-specific configuration AFTER initial save
             if ($fieldtype === 'FieldtypeOptions' && isset($fieldMapping['options'])) {
                 $this->configureOptionsField($field, $fieldMapping['options']);
             }
@@ -88,8 +91,6 @@ class TemplateCreator extends WireData {
             if ($fieldtype === 'FieldtypePage' && isset($fieldMapping['reference_table'])) {
                 $this->configurePageField($field, $fieldMapping['reference_table']);
             }
-
-            $field->save();
 
             $this->wire()->message("Created field: $fieldName ($fieldtype)");
         }
@@ -105,10 +106,26 @@ class TemplateCreator extends WireData {
             return;
         }
 
-        // Set options as string (one per line)
-        $optionsString = implode("\n", $options);
-        $field->type->manager->setOptionsString($field, $optionsString, false);
-        $field->save();
+        // Get the options manager for this field
+        $manager = $field->type->getOptions($field);
+
+        // Clear existing options
+        foreach ($manager as $option) {
+            $manager->delete($option);
+        }
+
+        // Add new options
+        foreach ($options as $value) {
+            $option = $this->wire(new SelectableOption());
+            $option->title = $value;
+            $option->value = $value;
+            $manager->add($option);
+        }
+
+        // Save the options
+        $manager->save();
+
+        $this->wire()->message("Added " . count($options) . " options to field: " . $field->name);
     }
 
     /**
