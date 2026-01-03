@@ -74,6 +74,14 @@ class ProcessDatabaseImporter extends Process implements Module {
      * Main execute method
      */
     public function ___execute() {
+        // Check for actions first
+        if ($this->input->get('action')) {
+            $action = $this->input->get('action');
+            if ($action === 'clear') {
+                return $this->executeClear();
+            }
+        }
+
         // Check if we have session data (analysis results)
         $sessionData = $this->session->get(self::SESSION_KEY);
 
@@ -413,22 +421,18 @@ class ProcessDatabaseImporter extends Process implements Module {
     }
 
     /**
-     * Clear session data
+     * Clear session data and return to upload
      */
-    public function ___executeAction() {
-        $action = $this->input->get('action');
-
-        if ($action === 'clear') {
-            // Clean up temp file if exists
-            $sessionData = $this->session->get(self::SESSION_KEY);
-            if (isset($sessionData['temp_file']) && file_exists($sessionData['temp_file'])) {
-                unlink($sessionData['temp_file']);
-            }
-
-            $this->session->remove(self::SESSION_KEY);
-            $this->message($this->_('Session cleared'));
-            $this->session->redirect($this->page->url);
+    protected function executeClear() {
+        // Clean up temp file if exists
+        $sessionData = $this->session->get(self::SESSION_KEY);
+        if (isset($sessionData['temp_file']) && file_exists($sessionData['temp_file'])) {
+            unlink($sessionData['temp_file']);
         }
+
+        $this->session->remove(self::SESSION_KEY);
+        $this->message($this->_('Session cleared'));
+        $this->session->redirect($this->page->url);
     }
 
     /**
