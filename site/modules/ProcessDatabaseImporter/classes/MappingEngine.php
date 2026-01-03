@@ -86,6 +86,19 @@ class MappingEngine extends WireData {
         // Trim underscores
         $name = trim($name, '_');
 
+        // Check for ProcessWire reserved field names
+        $reserved = [
+            'id', 'name', 'parent', 'parent_id', 'parents', 'template', 'template_id',
+            'templates', 'children', 'child', 'created', 'modified', 'createdUser',
+            'modifiedUser', 'sort', 'sortfield', 'numChildren', 'num_children',
+            'url', 'path', 'httpUrl', 'httpurl', 'status', 'references', 'rootParent',
+        ];
+
+        // If field name is reserved, prefix with "field_"
+        if (in_array($name, $reserved)) {
+            $name = 'field_' . $name;
+        }
+
         // Ensure it doesn't start with a number
         if (preg_match('/^\d/', $name)) {
             $name = 'field_' . $name;
