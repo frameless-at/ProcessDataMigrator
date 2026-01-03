@@ -280,14 +280,31 @@ class TypeDetector extends WireData {
         $total = count($values);
         $uniqueCount = count($unique);
 
-        // If less than 10 unique values and each value appears multiple times
-        if ($uniqueCount > 0 && $uniqueCount <= 10 && $total / $uniqueCount >= 3) {
+        if ($uniqueCount === 0) {
+            return ['is_options' => false];
+        }
+
+        // Very few unique values (<=5) - almost certainly an options field
+        if ($uniqueCount <= 5) {
+            return [
+                'is_options' => true,
+                'type' => 'options',
+                'confidence' => 90,
+                'fieldtype' => 'FieldtypeOptions',
+                'patterns' => ['low_cardinality'],
+                'options' => array_values($unique),
+                'options_count' => $uniqueCount
+            ];
+        }
+
+        // Medium cardinality (6-10) - check if values repeat enough
+        if ($uniqueCount <= 10 && $total / $uniqueCount >= 2) {
             return [
                 'is_options' => true,
                 'type' => 'options',
                 'confidence' => 85,
                 'fieldtype' => 'FieldtypeOptions',
-                'patterns' => ['options'],
+                'patterns' => ['options', 'repeated_values'],
                 'options' => array_values($unique),
                 'options_count' => $uniqueCount
             ];
