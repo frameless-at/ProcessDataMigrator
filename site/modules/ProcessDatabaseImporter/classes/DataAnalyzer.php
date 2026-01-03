@@ -123,6 +123,11 @@ class DataAnalyzer extends WireData {
         $analysis['suggested_fieldtype'] = $detection['fieldtype'];
         $analysis['patterns'] = $detection['patterns'] ?? [];
 
+        // CRITICAL: Include options if this is an Options field
+        if (isset($detection['options'])) {
+            $analysis['options'] = $detection['options'];
+        }
+
         // Special flags
         $analysis['is_likely_id'] = $this->isLikelyId($columnName, $columnInfo);
         $analysis['is_likely_foreign_key'] = $this->isLikelyForeignKey($columnName, $columnInfo);
