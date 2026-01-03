@@ -80,10 +80,13 @@ class TypeDetector extends WireData {
             }
         }
 
-        // Check for options/select field
-        $optionsResult = $this->detectOptionsField($values);
-        if ($optionsResult['is_options']) {
-            return $optionsResult;
+        // Check for options/select field - but only if not already detected as email, URL, etc.
+        // Options should not override specific types with high confidence
+        if ($result['confidence'] < 80 || $result['fieldtype'] === 'FieldtypeText') {
+            $optionsResult = $this->detectOptionsField($values);
+            if ($optionsResult['is_options']) {
+                return $optionsResult;
+            }
         }
 
         return $result;
@@ -135,16 +138,25 @@ class TypeDetector extends WireData {
 
         foreach ($this->patterns as $patternName => $pattern) {
             $matches = 0;
+            $nonNullCount = 0;
+
             foreach ($sample as $value) {
-                if (preg_match($pattern, $value)) {
-                    $matches++;
+                if ($value !== null && $value !== '') {
+                    $nonNullCount++;
+                    if (preg_match($pattern, $value)) {
+                        $matches++;
+                    }
                 }
             }
 
-            $percentage = ($matches / count($sample)) * 100;
+            // Calculate percentage based on non-null values only
+            if ($nonNullCount > 0) {
+                $percentage = ($matches / $nonNullCount) * 100;
 
-            if ($percentage >= 70) {
-                $patternMatches[$patternName] = $percentage;
+                // Lower threshold to 60% to handle fields with NULL values
+                if ($percentage >= 60) {
+                    $patternMatches[$patternName] = $percentage;
+                }
             }
         }
 

@@ -105,17 +105,10 @@ class TemplateCreator extends WireData {
             return;
         }
 
-        // Add options
-        $manager = $this->wire(new SelectableOptionManager());
-
-        foreach ($options as $index => $value) {
-            $option = $this->wire(new SelectableOption());
-            $option->value = $index + 1;
-            $option->title = $value;
-            $manager->add($option);
-        }
-
-        $field->type->manager->setOptionsString($field, implode("\n", $options), false);
+        // Set options as string (one per line)
+        $optionsString = implode("\n", $options);
+        $field->type->manager->setOptionsString($field, $optionsString, false);
+        $field->save();
     }
 
     /**
