@@ -104,8 +104,14 @@ class ProcessDatabaseImporter extends Process implements Module {
     protected function executeUpload() {
         $this->headline('Database Import - Upload');
 
+        // Build form first
+        $form = $this->buildUploadForm();
+
         // Handle file upload via $_FILES
         if ($this->input->post('submit_upload') && isset($_FILES['sql_file'])) {
+            // Process form to get other field values
+            $form->processInput($this->input->post);
+
             $file = $_FILES['sql_file'];
 
             // Validate upload
@@ -116,11 +122,15 @@ class ProcessDatabaseImporter extends Process implements Module {
             } else if (!preg_match('/\.sql$/i', $file['name'])) {
                 $this->error($this->_('Only .sql files are allowed'));
             } else {
+                // Get form field values
+                $sampleSize = (int) $form->get('sample_size')->value;
+                $maxRows = (int) $form->get('max_rows')->value;
+
                 // Move to temp location
                 $tempFile = $this->uploadsPath . uniqid('import_') . '.sql';
                 if (move_uploaded_file($file['tmp_name'], $tempFile)) {
                     // Process the file
-                    $result = $this->processUpload($tempFile);
+                    $result = $this->processUpload($tempFile, $sampleSize, $maxRows);
 
                     if ($result['success']) {
                         // Store analysis in session
@@ -147,7 +157,7 @@ class ProcessDatabaseImporter extends Process implements Module {
             }
         }
 
-        return $this->buildUploadForm();
+        return $form->render();
     }
 
     /**
@@ -227,15 +237,13 @@ class ProcessDatabaseImporter extends Process implements Module {
         $f->icon = 'search';
         $form->add($f);
 
-        return $form->render();
+        return $form;
     }
 
     /**
      * Process uploaded file
      */
-    protected function processUpload($filePath) {
-        // $filePath is now directly the file path string
-
+    protected function processUpload($filePath, $sampleSize = 100, $maxRows = 0) {
         // Initialize parser
         $parser = new SqlParser();
 
@@ -248,8 +256,8 @@ class ProcessDatabaseImporter extends Process implements Module {
 
         // Parse file
         $options = [
-            'sample_size' => (int) $this->input->post('sample_size', 100),
-            'max_rows' => (int) $this->input->post('max_rows', 0),
+            'sample_size' => $sampleSize,
+            'max_rows' => $maxRows,
         ];
 
         try {
