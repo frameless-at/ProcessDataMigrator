@@ -432,6 +432,26 @@ class ProcessDatabaseImporter extends Process implements Module {
             $permission->save();
             $this->message("Created permission: database-import");
         }
+
+        // Create admin page
+        $page = $this->pages->get('template=admin, name=database-importer');
+        if (!$page->id) {
+            // Get setup page as parent
+            $parent = $this->pages->get($this->config->adminRootPageID)->child('name=setup');
+            if (!$parent->id) {
+                throw new WireException("Setup page not found");
+            }
+
+            $page = new Page();
+            $page->template = 'admin';
+            $page->parent = $parent;
+            $page->name = 'database-importer';
+            $page->title = 'Database Importer';
+            $page->process = $this;
+            $page->save();
+
+            $this->message("Created page: {$page->path}");
+        }
     }
 
     /**
@@ -442,6 +462,13 @@ class ProcessDatabaseImporter extends Process implements Module {
         $uploadsPath = $this->config->paths->cache . 'DatabaseImporter/';
         if (is_dir($uploadsPath)) {
             wireRmdir($uploadsPath, true);
+        }
+
+        // Remove admin page
+        $page = $this->pages->get('template=admin, name=database-importer');
+        if ($page->id) {
+            $this->pages->delete($page, true);
+            $this->message("Removed page: database-importer");
         }
 
         // Note: We don't remove the permission as it might be in use
