@@ -19,19 +19,19 @@
 
 .table-analysis .uk-description-list {
     margin: 15px 0;
+    display: grid;
+    grid-template-columns: 200px auto;
+    gap: 8px 20px;
 }
 
 .table-analysis .uk-description-list dt {
     font-weight: bold;
     color: #555;
-    width: 200px;
-    float: left;
-    clear: left;
+    margin: 0;
 }
 
 .table-analysis .uk-description-list dd {
-    margin-left: 220px;
-    margin-bottom: 8px;
+    margin: 0;
 }
 
 .table-analysis table {
