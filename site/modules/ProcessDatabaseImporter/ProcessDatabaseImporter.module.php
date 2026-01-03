@@ -96,41 +96,50 @@ class ProcessDatabaseImporter extends Process implements Module {
     protected function executeUpload() {
         $this->headline('Database Import - Upload');
 
-        $form = $this->buildUploadForm();
+        // Handle file upload via $_FILES
+        if ($this->input->post('submit_upload') && isset($_FILES['sql_file'])) {
+            $file = $_FILES['sql_file'];
 
-        if ($this->input->post('submit_upload')) {
-            $form->processInput($this->input->post);
+            // Validate upload
+            if ($file['error'] !== UPLOAD_ERR_OK) {
+                $this->error($this->_('File upload failed'));
+            } else if ($file['size'] === 0) {
+                $this->error($this->_('File is empty'));
+            } else if (!preg_match('/\.sql$/i', $file['name'])) {
+                $this->error($this->_('Only .sql files are allowed'));
+            } else {
+                // Move to temp location
+                $tempFile = $this->uploadsPath . uniqid('import_') . '.sql';
+                if (move_uploaded_file($file['tmp_name'], $tempFile)) {
+                    // Process the file
+                    $result = $this->processUpload($tempFile);
 
-            if ($form->getErrors()) {
-                return $form->render();
-            }
+                    if ($result['success']) {
+                        // Store analysis in session
+                        $this->session->set(self::SESSION_KEY, [
+                            'step' => 'analyze',
+                            'file' => $result['file'],
+                            'temp_file' => $tempFile,
+                            'analysis' => $result['analysis'],
+                            'tables' => $result['tables']
+                        ]);
 
-            // Handle file upload
-            $upload = $form->get('upload_file');
-            if ($upload && $upload->value) {
-                $uploadedFile = $upload->value;
-
-                // Process the file
-                $result = $this->processUpload($uploadedFile);
-
-                if ($result['success']) {
-                    // Store analysis in session
-                    $this->session->set(self::SESSION_KEY, [
-                        'step' => 'analyze',
-                        'file' => $result['file'],
-                        'analysis' => $result['analysis'],
-                        'tables' => $result['tables']
-                    ]);
-
-                    // Redirect to analysis
-                    $this->session->redirect($this->page->url);
+                        // Redirect to analysis
+                        $this->session->redirect($this->page->url);
+                    } else {
+                        $this->error($result['error']);
+                        // Clean up temp file
+                        if (file_exists($tempFile)) {
+                            unlink($tempFile);
+                        }
+                    }
                 } else {
-                    $this->error($result['error']);
+                    $this->error($this->_('Failed to save uploaded file'));
                 }
             }
         }
 
-        return $form->render();
+        return $this->buildUploadForm();
     }
 
     /**
@@ -162,17 +171,19 @@ class ProcessDatabaseImporter extends Process implements Module {
         $form = $this->modules->get('InputfieldForm');
         $form->attr('method', 'post');
         $form->attr('action', $this->page->url);
+        $form->attr('enctype', 'multipart/form-data');
 
-        // File upload
-        $f = $this->modules->get('InputfieldFile');
-        $f->name = 'upload_file';
+        // File upload - using Markup instead of InputfieldFile
+        $f = $this->modules->get('InputfieldMarkup');
         $f->label = $this->_('Upload Database File');
         $f->description = $this->_('Upload a SQL dump file to analyze and import');
-        $f->extensions = 'sql';
-        $f->maxFiles = 1;
-        $f->destinationPath = $this->uploadsPath;
-        $f->required = true;
-        $f->overwrite = true;
+
+        $fileInput = '<div class="InputfieldContent">';
+        $fileInput .= '<input type="file" name="sql_file" accept=".sql" required>';
+        $fileInput .= '<p class="description">' . $this->_('Only .sql files are accepted') . '</p>';
+        $fileInput .= '</div>';
+
+        $f->value = $fileInput;
         $form->add($f);
 
         // Options fieldset
@@ -208,14 +219,14 @@ class ProcessDatabaseImporter extends Process implements Module {
         $f->icon = 'search';
         $form->add($f);
 
-        return $form;
+        return $form->render();
     }
 
     /**
      * Process uploaded file
      */
-    protected function processUpload($uploadedFile) {
-        $filePath = $uploadedFile->filename;
+    protected function processUpload($filePath) {
+        // $filePath is now directly the file path string
 
         // Initialize parser
         $parser = new SqlParser();
@@ -408,6 +419,12 @@ class ProcessDatabaseImporter extends Process implements Module {
         $action = $this->input->get('action');
 
         if ($action === 'clear') {
+            // Clean up temp file if exists
+            $sessionData = $this->session->get(self::SESSION_KEY);
+            if (isset($sessionData['temp_file']) && file_exists($sessionData['temp_file'])) {
+                unlink($sessionData['temp_file']);
+            }
+
             $this->session->remove(self::SESSION_KEY);
             $this->message($this->_('Session cleared'));
             $this->session->redirect($this->page->url);
