@@ -80,6 +80,11 @@ class TemplateCreator extends WireData {
                 $field->required = 1;
             }
 
+            // CRITICAL: Options field needs inputfieldClass
+            if ($fieldtype === 'FieldtypeOptions') {
+                $field->set('inputfieldClass', 'InputfieldSelect');
+            }
+
             // Save field first (required before setting options)
             $field->save();
 
