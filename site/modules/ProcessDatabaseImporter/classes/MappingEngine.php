@@ -16,6 +16,11 @@ class MappingEngine extends WireData {
      * @return array Mapping configuration
      */
     public function createMapping($analysis, $tableName) {
+        // Validate required analysis fields
+        if (!isset($analysis['suggested_template']) || !isset($analysis['suggested_title_field']) || !isset($analysis['columns'])) {
+            throw new \Exception('Invalid analysis data structure. Missing required fields.');
+        }
+
         $mapping = [
             'table_name' => $tableName,
             'template' => $analysis['suggested_template'],

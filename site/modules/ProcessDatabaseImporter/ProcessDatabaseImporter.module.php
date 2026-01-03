@@ -473,13 +473,23 @@ class ProcessDatabaseImporter extends Process implements Module {
         }
 
         // Extract first table (for now - later we can add table selection)
-        $allAnalysis = $sessionData['analysis'];
-        $allTables = $sessionData['tables'];
+        $allAnalysis = $sessionData['analysis'] ?? [];
+        $allTables = $sessionData['tables'] ?? [];
+
+        if (empty($allAnalysis) || empty($allTables)) {
+            $this->error($this->_('No table data found in session. Please start over.'));
+            $this->session->redirect($this->page->url);
+        }
 
         // Get first table
         $tableName = array_key_first($allAnalysis);
-        $analysis = $allAnalysis[$tableName];
-        $tableData = $allTables[$tableName];
+        $analysis = $allAnalysis[$tableName] ?? [];
+        $tableData = $allTables[$tableName] ?? [];
+
+        if (empty($analysis) || empty($tableData)) {
+            $this->error($this->_('Invalid table data. Please start over.'));
+            $this->session->redirect($this->page->url);
+        }
 
         try {
             // Step 1: Create automatic mapping
