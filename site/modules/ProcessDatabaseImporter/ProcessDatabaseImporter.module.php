@@ -472,9 +472,14 @@ class ProcessDatabaseImporter extends Process implements Module {
             $this->session->redirect($this->page->url);
         }
 
-        $analysis = $sessionData['analysis'];
-        $tableData = $sessionData['table_data'];
-        $tableName = $sessionData['table_name'];
+        // Extract first table (for now - later we can add table selection)
+        $allAnalysis = $sessionData['analysis'];
+        $allTables = $sessionData['tables'];
+
+        // Get first table
+        $tableName = array_key_first($allAnalysis);
+        $analysis = $allAnalysis[$tableName];
+        $tableData = $allTables[$tableName];
 
         try {
             // Step 1: Create automatic mapping
@@ -496,7 +501,7 @@ class ProcessDatabaseImporter extends Process implements Module {
 
             // Step 4: Import data
             $importProcessor = $this->wire(new ImportProcessor());
-            $result = $importProcessor->import($tableData, $mapping, $template, $parent);
+            $result = $importProcessor->import($tableData['data'], $mapping, $template, $parent);
 
             // Store import results in session
             $sessionData['step'] = 'import';

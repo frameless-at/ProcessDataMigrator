@@ -20,10 +20,10 @@ class TemplateCreator extends WireData {
         // Get or create template
         $template = $this->wire('templates')->get($templateName);
 
-        if (!$template) {
+        if (!$template || !$template->id) {
             $template = $this->wire(new Template());
             $template->name = $templateName;
-            $template->label = ucfirst($templateName);
+            $template->label = ucfirst($templateName ?: 'Untitled');
 
             // Create fieldgroup
             $fieldgroup = $this->wire(new Fieldgroup());
@@ -33,7 +33,7 @@ class TemplateCreator extends WireData {
             $template->fieldgroup = $fieldgroup;
             $template->save();
 
-            $this->message("Created template: $templateName");
+            $this->wire()->message("Created template: $templateName");
         }
 
         // Add title field if not present
@@ -91,7 +91,7 @@ class TemplateCreator extends WireData {
 
             $field->save();
 
-            $this->message("Created field: $fieldName ($fieldtype)");
+            $this->wire()->message("Created field: $fieldName ($fieldtype)");
         }
 
         return $field;
@@ -179,15 +179,29 @@ class TemplateCreator extends WireData {
             $page = $this->wire('pages')->get($currentPath);
 
             if (!$page->id) {
-                // Create page
+                // Create page using a safe template
+                // Try to find a suitable template (basic-page, home, or the first available)
+                $template = $this->wire('templates')->get('basic-page');
+                if (!$template || !$template->id) {
+                    $template = $this->wire('templates')->get('home');
+                }
+                if (!$template || !$template->id) {
+                    // Get first non-system template
+                    $template = $this->wire('templates')->find("flags=0, limit=1")->first();
+                }
+
+                if (!$template || !$template->id) {
+                    throw new \Exception("No suitable template found for parent page creation");
+                }
+
                 $page = $this->wire(new Page());
-                $page->template = 'basic-page'; // Use basic-page or admin
+                $page->template = $template;
                 $page->parent = $currentParent;
                 $page->name = $segment;
                 $page->title = ucfirst($segment);
                 $page->save();
 
-                $this->message("Created parent page: $currentPath");
+                $this->wire()->message("Created parent page: $currentPath");
             }
 
             $currentParent = $page;

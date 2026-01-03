@@ -10,6 +10,7 @@ class DataAnalyzer extends WireData {
     protected $typeDetector;
 
     public function __construct() {
+        parent::__construct();
         $this->typeDetector = new TypeDetector();
     }
 
