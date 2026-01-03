@@ -6,6 +6,9 @@ require_once(__DIR__ . '/classes/parsers/AbstractParser.php');
 require_once(__DIR__ . '/classes/parsers/SqlParser.php');
 require_once(__DIR__ . '/classes/DataAnalyzer.php');
 require_once(__DIR__ . '/classes/TypeDetector.php');
+require_once(__DIR__ . '/classes/MappingEngine.php');
+require_once(__DIR__ . '/classes/TemplateCreator.php');
+require_once(__DIR__ . '/classes/ImportProcessor.php');
 
 /**
  * ProcessWire Database Importer
@@ -80,6 +83,9 @@ class ProcessDatabaseImporter extends Process implements Module {
             if ($action === 'clear') {
                 return $this->executeClear();
             }
+            if ($action === 'import') {
+                return $this->executeImport();
+            }
         }
 
         // Check if we have session data (analysis results)
@@ -90,6 +96,8 @@ class ProcessDatabaseImporter extends Process implements Module {
             switch ($sessionData['step']) {
                 case 'analyze':
                     return $this->executeAnalyze();
+                case 'import':
+                    return $this->executeImportResult();
                 default:
                     return $this->executeUpload();
             }
@@ -434,11 +442,198 @@ class ProcessDatabaseImporter extends Process implements Module {
     protected function buildAnalysisActions() {
         $out = '<div class="uk-margin">';
 
+        // Import button
+        $out .= '<a href="' . $this->page->url . '?action=import" class="ui-button ui-priority-primary">';
+        $out .= '<i class="fa fa-upload"></i> ' . $this->_('Start Import');
+        $out .= '</a>';
+
+        $out .= ' &nbsp; ';
+
         // Clear session button
         $out .= '<a href="' . $this->page->url . '?action=clear" class="ui-button ui-priority-secondary">';
         $out .= '<i class="fa fa-arrow-left"></i> ' . $this->_('Start Over');
         $out .= '</a>';
 
+        $out .= '</div>';
+
+        return $out;
+    }
+
+    /**
+     * Execute import process
+     */
+    protected function executeImport() {
+        $this->headline('Database Import - Processing');
+
+        // Get session data
+        $sessionData = $this->session->get(self::SESSION_KEY);
+        if (!$sessionData || !isset($sessionData['analysis'])) {
+            $this->error($this->_('No analysis data found. Please start over.'));
+            $this->session->redirect($this->page->url);
+        }
+
+        $analysis = $sessionData['analysis'];
+        $tableData = $sessionData['table_data'];
+        $tableName = $sessionData['table_name'];
+
+        try {
+            // Step 1: Create automatic mapping
+            $mappingEngine = $this->wire(new MappingEngine());
+            $mapping = $mappingEngine->createMapping($analysis, $tableName);
+
+            $this->message($this->_('Created field mapping'));
+
+            // Step 2: Create template and fields
+            $templateCreator = $this->wire(new TemplateCreator());
+            $template = $templateCreator->createTemplate($mapping);
+
+            $this->message($this->_('Created template: ') . $template->name);
+
+            // Step 3: Create parent page
+            $parent = $templateCreator->createParentPage($mapping['parent'], $template->name);
+
+            $this->message($this->_('Created parent page: ') . $parent->path);
+
+            // Step 4: Import data
+            $importProcessor = $this->wire(new ImportProcessor());
+            $result = $importProcessor->import($tableData, $mapping, $template, $parent);
+
+            // Store import results in session
+            $sessionData['step'] = 'import';
+            $sessionData['import_result'] = $result;
+            $sessionData['mapping'] = $mapping;
+            $sessionData['template'] = $template->name;
+            $sessionData['parent'] = $parent->path;
+            $this->session->set(self::SESSION_KEY, $sessionData);
+
+            // Redirect to results
+            $this->session->redirect($this->page->url);
+
+        } catch (\Exception $e) {
+            $this->error($this->_('Import failed: ') . $e->getMessage());
+            return $this->executeAnalyze();
+        }
+    }
+
+    /**
+     * Show import results
+     */
+    protected function executeImportResult() {
+        $this->headline('Database Import - Results');
+
+        // Get session data
+        $sessionData = $this->session->get(self::SESSION_KEY);
+        if (!$sessionData || !isset($sessionData['import_result'])) {
+            $this->error($this->_('No import results found. Please start over.'));
+            $this->session->redirect($this->page->url);
+        }
+
+        $result = $sessionData['import_result'];
+        $mapping = $sessionData['mapping'];
+        $template = $sessionData['template'];
+        $parent = $sessionData['parent'];
+
+        $out = '';
+
+        // Success summary
+        if ($result['success']) {
+            $out .= '<div class="uk-alert uk-alert-success">';
+            $out .= '<h3>' . $this->_('Import Completed Successfully') . '</h3>';
+            $out .= '<p>' . sprintf(
+                $this->_('Successfully imported %d pages using template "%s"'),
+                $result['imported'],
+                $template
+            ) . '</p>';
+            $out .= '</div>';
+        } else {
+            $out .= '<div class="uk-alert uk-alert-danger">';
+            $out .= '<h3>' . $this->_('Import Failed') . '</h3>';
+            $out .= '<p>' . $this->_('No pages were imported.') . '</p>';
+            $out .= '</div>';
+        }
+
+        // Statistics
+        $out .= '<div class="table-analysis">';
+        $out .= '<h3>' . $this->_('Import Statistics') . '</h3>';
+        $out .= '<dl class="uk-description-list">';
+        $out .= '<dt>' . $this->_('Template') . '</dt>';
+        $out .= '<dd><code>' . $this->sanitizer->entities($template) . '</code></dd>';
+        $out .= '<dt>' . $this->_('Parent Page') . '</dt>';
+        $out .= '<dd>' . $this->sanitizer->entities($parent) . '</dd>';
+        $out .= '<dt>' . $this->_('Pages Created') . '</dt>';
+        $out .= '<dd><strong>' . $result['imported'] . '</strong></dd>';
+        $out .= '<dt>' . $this->_('Errors') . '</dt>';
+        $out .= '<dd>' . count($result['errors']) . '</dd>';
+        $out .= '</dl>';
+        $out .= '</div>';
+
+        // Created pages
+        if (!empty($result['created_pages'])) {
+            $out .= '<div class="table-analysis uk-margin">';
+            $out .= '<h3>' . $this->_('Created Pages') . '</h3>';
+            $out .= '<table class="uk-table uk-table-striped uk-table-small">';
+            $out .= '<thead>';
+            $out .= '<tr>';
+            $out .= '<th>' . $this->_('ID') . '</th>';
+            $out .= '<th>' . $this->_('Title') . '</th>';
+            $out .= '<th>' . $this->_('Path') . '</th>';
+            $out .= '<th>' . $this->_('Actions') . '</th>';
+            $out .= '</tr>';
+            $out .= '</thead>';
+            $out .= '<tbody>';
+
+            foreach ($result['created_pages'] as $pageInfo) {
+                $out .= '<tr>';
+                $out .= '<td>' . $pageInfo['id'] . '</td>';
+                $out .= '<td>' . $this->sanitizer->entities($pageInfo['title']) . '</td>';
+                $out .= '<td><code>' . $this->sanitizer->entities($pageInfo['path']) . '</code></td>';
+                $out .= '<td>';
+                $out .= '<a href="' . $this->config->urls->admin . 'page/edit/?id=' . $pageInfo['id'] . '" target="_blank">';
+                $out .= '<i class="fa fa-edit"></i> ' . $this->_('Edit');
+                $out .= '</a>';
+                $out .= '</td>';
+                $out .= '</tr>';
+            }
+
+            $out .= '</tbody>';
+            $out .= '</table>';
+            $out .= '</div>';
+        }
+
+        // Errors
+        if (!empty($result['errors'])) {
+            $out .= '<div class="table-analysis uk-margin">';
+            $out .= '<h3>' . $this->_('Import Errors') . '</h3>';
+            $out .= '<table class="uk-table uk-table-striped uk-table-small">';
+            $out .= '<thead>';
+            $out .= '<tr>';
+            $out .= '<th>' . $this->_('Row') . '</th>';
+            $out .= '<th>' . $this->_('Error') . '</th>';
+            $out .= '</tr>';
+            $out .= '</thead>';
+            $out .= '<tbody>';
+
+            foreach ($result['errors'] as $error) {
+                $out .= '<tr>';
+                $out .= '<td>' . $error['row'] . '</td>';
+                $out .= '<td>' . $this->sanitizer->entities($error['error']) . '</td>';
+                $out .= '</tr>';
+            }
+
+            $out .= '</tbody>';
+            $out .= '</table>';
+            $out .= '</div>';
+        }
+
+        // Actions
+        $out .= '<div class="uk-margin">';
+        $out .= '<a href="' . $parent . '" class="ui-button ui-priority-primary" target="_blank">';
+        $out .= '<i class="fa fa-folder-open"></i> ' . $this->_('View Imported Pages');
+        $out .= '</a>';
+        $out .= ' &nbsp; ';
+        $out .= '<a href="' . $this->page->url . '?action=clear" class="ui-button ui-priority-secondary">';
+        $out .= '<i class="fa fa-arrow-left"></i> ' . $this->_('Start Over');
+        $out .= '</a>';
         $out .= '</div>';
 
         return $out;
