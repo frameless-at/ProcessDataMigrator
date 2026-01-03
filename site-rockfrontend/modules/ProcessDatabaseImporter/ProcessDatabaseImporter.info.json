@@ -1,0 +1,20 @@
+{
+  "title": "Database Importer",
+  "summary": "Import data from database dumps (SQL, CSV, JSON, XML) into ProcessWire",
+  "version": "1.0.0",
+  "author": "ProcessWire",
+  "icon": "database",
+  "permission": "database-import",
+  "permissions": {
+    "database-import": "Import database data into ProcessWire"
+  },
+  "page": {
+    "name": "database-importer",
+    "parent": "setup",
+    "title": "Database Importer"
+  },
+  "requires": [
+    "PHP>=7.4",
+    "ProcessWire>=3.0.0"
+  ]
+}
