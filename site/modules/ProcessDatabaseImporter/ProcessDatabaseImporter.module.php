@@ -376,10 +376,26 @@ class ProcessDatabaseImporter extends Process implements Module {
             if ($column['is_likely_id']) {
                 $out .= ' <span class="uk-badge">ID</span>';
             }
-            if ($column['is_likely_title']) {
+
+            // Title badge: only for the actual suggested title field
+            if ($column['name'] === $analysis['suggested_title_field']) {
                 $out .= ' <span class="uk-badge uk-badge-success">Title</span>';
             }
-            if ($column['is_likely_foreign_key']) {
+
+            // FK badge: only for actual foreign keys (from SQL constraints) or *_id pattern (but not is_* or has_*)
+            $isForeignKey = false;
+            if (isset($analysis['foreign_keys'][$column['name']])) {
+                $isForeignKey = true; // Actual FK from SQL
+            } else if ($column['is_likely_foreign_key']) {
+                // Additional check: must end with _id but NOT start with is_ or has_
+                $name = strtolower($column['name']);
+                if (substr($name, -3) === '_id' &&
+                    strpos($name, 'is_') !== 0 &&
+                    strpos($name, 'has_') !== 0) {
+                    $isForeignKey = true;
+                }
+            }
+            if ($isForeignKey) {
                 $out .= ' <span class="uk-badge uk-badge-warning">FK</span>';
             }
 

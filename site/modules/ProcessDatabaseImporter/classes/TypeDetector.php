@@ -52,6 +52,12 @@ class TypeDetector extends WireData {
 
         $baseType = $columnInfo['base_type'] ?? 'string';
 
+        // Check for boolean/checkbox first (before options detection)
+        $booleanResult = $this->detectBooleanField($columnName, $columnInfo, $values);
+        if ($booleanResult['is_boolean']) {
+            return $booleanResult;
+        }
+
         // Start with SQL type-based detection
         $result = $this->detectFromSqlType($baseType, $columnInfo);
 
@@ -274,8 +280,8 @@ class TypeDetector extends WireData {
         $total = count($values);
         $uniqueCount = count($unique);
 
-        // If less than 50 unique values and each value appears multiple times
-        if ($uniqueCount > 0 && $uniqueCount <= 50 && $total / $uniqueCount >= 3) {
+        // If less than 10 unique values and each value appears multiple times
+        if ($uniqueCount > 0 && $uniqueCount <= 10 && $total / $uniqueCount >= 3) {
             return [
                 'is_options' => true,
                 'type' => 'options',
@@ -288,6 +294,81 @@ class TypeDetector extends WireData {
         }
 
         return ['is_options' => false];
+    }
+
+    /**
+     * Detect if this is a boolean/checkbox field
+     */
+    protected function detectBooleanField($columnName, $columnInfo, $values) {
+        $sqlType = $columnInfo['type'] ?? '';
+        $name = strtolower($columnName);
+
+        // Check for tinyint(1) - MySQL standard for boolean
+        $isTinyInt = stripos($sqlType, 'tinyint(1)') !== false;
+
+        // Check for boolean-like column names
+        $booleanPrefixes = ['is_', 'has_', 'can_', 'should_', 'will_', 'does_'];
+        $booleanSuffixes = ['_active', '_enabled', '_visible', '_published', '_verified', '_confirmed'];
+        $booleanNames = ['active', 'enabled', 'visible', 'published', 'verified', 'confirmed', 'status'];
+
+        $hasBooleanName = false;
+        foreach ($booleanPrefixes as $prefix) {
+            if (strpos($name, $prefix) === 0) {
+                $hasBooleanName = true;
+                break;
+            }
+        }
+        if (!$hasBooleanName) {
+            foreach ($booleanSuffixes as $suffix) {
+                if (substr($name, -strlen($suffix)) === $suffix) {
+                    $hasBooleanName = true;
+                    break;
+                }
+            }
+        }
+        if (!$hasBooleanName && in_array($name, $booleanNames)) {
+            $hasBooleanName = true;
+        }
+
+        // Check values - should only be 0/1 or true/false
+        $unique = array_unique($values);
+        $uniqueCount = count($unique);
+        $isBinaryValues = $uniqueCount <= 2;
+
+        // Strong indicator: tinyint(1) + boolean name
+        if ($isTinyInt && $hasBooleanName) {
+            return [
+                'is_boolean' => true,
+                'type' => 'boolean',
+                'confidence' => 95,
+                'fieldtype' => 'FieldtypeCheckbox',
+                'patterns' => ['tinyint(1)', 'boolean_name']
+            ];
+        }
+
+        // Medium indicator: tinyint(1) with binary values
+        if ($isTinyInt && $isBinaryValues) {
+            return [
+                'is_boolean' => true,
+                'type' => 'boolean',
+                'confidence' => 90,
+                'fieldtype' => 'FieldtypeCheckbox',
+                'patterns' => ['tinyint(1)', 'binary_values']
+            ];
+        }
+
+        // Weak indicator: boolean name with binary values
+        if ($hasBooleanName && $isBinaryValues) {
+            return [
+                'is_boolean' => true,
+                'type' => 'boolean',
+                'confidence' => 85,
+                'fieldtype' => 'FieldtypeCheckbox',
+                'patterns' => ['boolean_name', 'binary_values']
+            ];
+        }
+
+        return ['is_boolean' => false];
     }
 
     /**
