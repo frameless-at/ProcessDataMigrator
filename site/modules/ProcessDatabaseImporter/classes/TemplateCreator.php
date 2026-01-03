@@ -106,26 +106,20 @@ class TemplateCreator extends WireData {
             return;
         }
 
-        // Get the options manager for this field
-        $manager = $field->type->getOptions($field);
+        // Build options string (one option per line)
+        // Format: title|value or just title if title=value
+        $optionsString = implode("\n", $options);
 
-        // Clear existing options
-        foreach ($manager as $option) {
-            $manager->delete($option);
-        }
+        // Use the manager to set options from string
+        $result = $field->type->manager->setOptionsString($field, $optionsString, true);
 
-        // Add new options
-        foreach ($options as $value) {
-            $option = $this->wire(new SelectableOption());
-            $option->title = $value;
-            $option->value = $value;
-            $manager->add($option);
-        }
-
-        // Save the options
-        $manager->save();
-
-        $this->wire()->message("Added " . count($options) . " options to field: " . $field->name);
+        $this->wire()->message(sprintf(
+            "Configured options field '%s': %d added, %d updated, %d deleted",
+            $field->name,
+            $result['added'],
+            $result['updated'],
+            $result['deleted']
+        ));
     }
 
     /**
