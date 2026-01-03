@@ -205,9 +205,10 @@ class SqlParser extends AbstractParser {
             $line = rtrim($line, ',');
 
             // Parse column definition
-            if (preg_match('/^`?([a-zA-Z0-9_]+)`?\s+([a-zA-Z0-9()]+)/i', $line, $matches)) {
+            // Match column name and type (including enum/set with values)
+            if (preg_match('/^`?([a-zA-Z0-9_]+)`?\s+([a-z]+(?:\([^)]+\))?(?:\s+unsigned)?)/i', $line, $matches)) {
                 $columnName = $matches[1];
-                $columnType = strtolower($matches[2]);
+                $columnType = strtolower(trim($matches[2]));
 
                 // Skip special keywords
                 if (in_array(strtoupper($columnName), ['PRIMARY', 'KEY', 'UNIQUE', 'INDEX', 'CONSTRAINT', 'FOREIGN'])) {
