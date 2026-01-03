@@ -112,6 +112,10 @@ class TemplateCreator extends WireData {
             return;
         }
 
+        // DEBUG
+        $this->wire()->message("DEBUG: Field ID = {$field->id}, Name = {$field->name}");
+        $this->wire()->message("DEBUG: Options to add: " . implode(', ', $options));
+
         // Get the fieldtype module
         $fieldtype = $this->wire('modules')->get('FieldtypeOptions');
         if (!$fieldtype) {
@@ -121,10 +125,17 @@ class TemplateCreator extends WireData {
 
         // Build options string (one option per line)
         $optionsString = implode("\n", $options);
+        $this->wire()->message("DEBUG: Options string: " . $optionsString);
 
         // Use the fieldtype's manager to set options
         try {
             $result = $fieldtype->manager->setOptionsString($field, $optionsString, true);
+
+            $this->wire()->message("DEBUG: setOptionsString result: " . print_r($result, true));
+
+            // Verify options were added
+            $savedOptions = $fieldtype->getOptions($field);
+            $this->wire()->message("DEBUG: Options count after save: " . $savedOptions->count());
 
             $this->wire()->message(sprintf(
                 "Configured options field '%s': %d added, %d updated, %d deleted",
@@ -135,6 +146,7 @@ class TemplateCreator extends WireData {
             ));
         } catch (\Exception $e) {
             $this->wire()->error("Failed to set options for field {$field->name}: " . $e->getMessage());
+            $this->wire()->error("DEBUG: Exception trace: " . $e->getTraceAsString());
         }
     }
 
