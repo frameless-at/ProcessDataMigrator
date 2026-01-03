@@ -69,6 +69,9 @@ class SqlParser extends AbstractParser {
         $currentTable = null;
         $currentCreateStatement = '';
         $inCreateStatement = false;
+        $currentInsertStatement = '';
+        $inInsertStatement = false;
+        $currentInsertTable = null;
 
         $handle = fopen($file, 'r');
         if (!$handle) {
@@ -81,11 +84,13 @@ class SqlParser extends AbstractParser {
             $lineNumber++;
             $line = trim($line);
 
-            // Skip comments and empty lines
-            if (empty($line) ||
-                substr($line, 0, 2) === '--' ||
-                substr($line, 0, 1) === '#') {
-                continue;
+            // Skip comments and empty lines (but not inside statements)
+            if (!$inCreateStatement && !$inInsertStatement) {
+                if (empty($line) ||
+                    substr($line, 0, 2) === '--' ||
+                    substr($line, 0, 1) === '#') {
+                    continue;
+                }
             }
 
             // Handle CREATE TABLE statements
@@ -131,37 +136,38 @@ class SqlParser extends AbstractParser {
                 continue;
             }
 
-            // Handle INSERT statements
+            // Handle INSERT statements - start
             if (stripos($line, 'INSERT INTO') !== false) {
+                $inInsertStatement = true;
+                $currentInsertStatement = $line . "\n";
+
                 // Extract table name
                 if (preg_match('/INSERT INTO\s+`?([a-zA-Z0-9_]+)`?/i', $line, $matches)) {
-                    $tableName = $matches[1];
-
-                    // Check if we're tracking this table
-                    if (!isset($this->tables[$tableName])) {
-                        continue;
-                    }
-
-                    // Check max rows limit
-                    if ($maxRows > 0 && $this->tables[$tableName]['row_count'] >= $maxRows) {
-                        continue;
-                    }
-
-                    // Parse INSERT statement
-                    $rows = $this->parseInsertStatement($line, $tableName);
-
-                    foreach ($rows as $row) {
-                        // Only store sample rows for analysis
-                        if ($this->tables[$tableName]['row_count'] < $sampleSize) {
-                            $this->tables[$tableName]['data'][] = $row;
-                        }
-                        $this->tables[$tableName]['row_count']++;
-
-                        if ($maxRows > 0 && $this->tables[$tableName]['row_count'] >= $maxRows) {
-                            break;
-                        }
-                    }
+                    $currentInsertTable = $matches[1];
                 }
+
+                // Check if statement ends on same line
+                if (substr($line, -1) === ';') {
+                    $inInsertStatement = false;
+                    $this->processInsertStatement($currentInsertStatement, $currentInsertTable, $maxRows, $sampleSize);
+                    $currentInsertStatement = '';
+                    $currentInsertTable = null;
+                }
+                continue;
+            }
+
+            // Continue collecting INSERT statement
+            if ($inInsertStatement) {
+                $currentInsertStatement .= $line . "\n";
+
+                // End of INSERT
+                if (substr($line, -1) === ';') {
+                    $inInsertStatement = false;
+                    $this->processInsertStatement($currentInsertStatement, $currentInsertTable, $maxRows, $sampleSize);
+                    $currentInsertStatement = '';
+                    $currentInsertTable = null;
+                }
+                continue;
             }
         }
 
@@ -292,6 +298,36 @@ class SqlParser extends AbstractParser {
         }
 
         return 'string';
+    }
+
+    /**
+     * Process complete INSERT statement (potentially multiline)
+     */
+    protected function processInsertStatement($sql, $tableName, $maxRows, $sampleSize) {
+        // Check if we're tracking this table
+        if (!isset($this->tables[$tableName])) {
+            return;
+        }
+
+        // Check max rows limit
+        if ($maxRows > 0 && $this->tables[$tableName]['row_count'] >= $maxRows) {
+            return;
+        }
+
+        // Parse INSERT statement
+        $rows = $this->parseInsertStatement($sql, $tableName);
+
+        foreach ($rows as $row) {
+            // Only store sample rows for analysis
+            if ($this->tables[$tableName]['row_count'] < $sampleSize) {
+                $this->tables[$tableName]['data'][] = $row;
+            }
+            $this->tables[$tableName]['row_count']++;
+
+            if ($maxRows > 0 && $this->tables[$tableName]['row_count'] >= $maxRows) {
+                break;
+            }
+        }
     }
 
     /**
