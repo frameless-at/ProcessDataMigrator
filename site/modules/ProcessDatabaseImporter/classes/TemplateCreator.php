@@ -103,23 +103,34 @@ class TemplateCreator extends WireData {
      */
     protected function configureOptionsField($field, $options) {
         if (!$field->type instanceof FieldtypeOptions) {
+            $this->wire()->error("Field {$field->name} is not a FieldtypeOptions field");
+            return;
+        }
+
+        // Get the fieldtype module
+        $fieldtype = $this->wire('modules')->get('FieldtypeOptions');
+        if (!$fieldtype) {
+            $this->wire()->error("Could not load FieldtypeOptions module");
             return;
         }
 
         // Build options string (one option per line)
-        // Format: title|value or just title if title=value
         $optionsString = implode("\n", $options);
 
-        // Use the manager to set options from string
-        $result = $field->type->manager->setOptionsString($field, $optionsString, true);
+        // Use the fieldtype's manager to set options
+        try {
+            $result = $fieldtype->manager->setOptionsString($field, $optionsString, true);
 
-        $this->wire()->message(sprintf(
-            "Configured options field '%s': %d added, %d updated, %d deleted",
-            $field->name,
-            $result['added'],
-            $result['updated'],
-            $result['deleted']
-        ));
+            $this->wire()->message(sprintf(
+                "Configured options field '%s': %d added, %d updated, %d deleted",
+                $field->name,
+                $result['added'],
+                $result['updated'],
+                $result['deleted']
+            ));
+        } catch (\Exception $e) {
+            $this->wire()->error("Failed to set options for field {$field->name}: " . $e->getMessage());
+        }
     }
 
     /**
