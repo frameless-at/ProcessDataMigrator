@@ -116,7 +116,22 @@ class ImportProcessor extends WireData {
         }
 
         // Save page
-        $page->save();
+        $saved = $page->save();
+
+        // Check if save was successful
+        if (!$saved || !$page->id) {
+            // Collect error messages from page
+            $errorMessages = [];
+            foreach ($page->getErrors() as $error) {
+                $errorMessages[] = $error;
+            }
+
+            $errorMsg = !empty($errorMessages)
+                ? implode('; ', $errorMessages)
+                : 'Page save failed for unknown reason';
+
+            throw new \Exception($errorMsg);
+        }
 
         return $page;
     }

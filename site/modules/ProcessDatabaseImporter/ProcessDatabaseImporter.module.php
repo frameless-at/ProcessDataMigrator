@@ -567,10 +567,19 @@ class ProcessDatabaseImporter extends Process implements Module {
                     'parent_page' => $parent->path,
                     'created_fields' => $templateCreator->getCreatedFields(),
                     'created_pages' => $result['created_pages'],
+                    'errors' => $result['errors'],
                     'timestamp' => time()
                 ];
 
+                // Show import summary
                 $this->message($this->_("Imported {$result['imported']} pages for table {$tableName}"));
+
+                // Show errors if any
+                if (!empty($result['errors'])) {
+                    foreach ($result['errors'] as $error) {
+                        $this->error($this->_("Row {$error['row']}: {$error['error']}"));
+                    }
+                }
             }
 
             // Store import results in session
@@ -618,7 +627,10 @@ class ProcessDatabaseImporter extends Process implements Module {
 
         // Statistics for each table
         foreach ($rollbackData as $tableData) {
-            $out .= '<div class="table-analysis uk-margin" style="border: 2px solid #ddd; padding: 15px; border-radius: 4px;">';
+            $hasErrors = !empty($tableData['errors']);
+            $borderColor = $hasErrors ? '#f0ad4e' : '#ddd';
+
+            $out .= '<div class="table-analysis uk-margin" style="border: 2px solid ' . $borderColor . '; padding: 15px; border-radius: 4px;">';
             $out .= '<h3>' . $this->sanitizer->entities($tableData['table']) . '</h3>';
             $out .= '<dl class="uk-description-list">';
             $out .= '<dt>' . $this->_('Template') . '</dt>';
@@ -629,7 +641,22 @@ class ProcessDatabaseImporter extends Process implements Module {
             $out .= '<dd><strong>' . count($tableData['created_pages']) . '</strong></dd>';
             $out .= '<dt>' . $this->_('Fields Created') . '</dt>';
             $out .= '<dd>' . count($tableData['created_fields']) . '</dd>';
+            $out .= '<dt>' . $this->_('Errors') . '</dt>';
+            $out .= '<dd>' . ($hasErrors ? '<strong style="color: #f0ad4e;">' . count($tableData['errors']) . '</strong>' : '0') . '</dd>';
             $out .= '</dl>';
+
+            // Show errors if any
+            if ($hasErrors) {
+                $out .= '<div class="uk-alert uk-alert-warning" style="margin-top: 10px;">';
+                $out .= '<h4>' . $this->_('Import Errors') . '</h4>';
+                $out .= '<ul>';
+                foreach ($tableData['errors'] as $error) {
+                    $out .= '<li><strong>Row ' . $error['row'] . ':</strong> ' . $this->sanitizer->entities($error['error']) . '</li>';
+                }
+                $out .= '</ul>';
+                $out .= '</div>';
+            }
+
             $out .= '</div>';
         }
 
