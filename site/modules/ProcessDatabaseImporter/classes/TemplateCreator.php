@@ -9,6 +9,18 @@ namespace ProcessWire;
 class TemplateCreator extends WireData {
 
     /**
+     * Track created fields for rollback
+     */
+    protected $createdFields = [];
+
+    /**
+     * Get list of created field names
+     */
+    public function getCreatedFields() {
+        return $this->createdFields;
+    }
+
+    /**
      * Create or update template with fields from mapping
      *
      * @param array $mapping Mapping configuration
@@ -98,6 +110,9 @@ class TemplateCreator extends WireData {
             }
 
             $this->wire()->message("Created field: $fieldName ($fieldtype)");
+
+            // Track for rollback
+            $this->createdFields[] = $fieldName;
         }
 
         return $field;

@@ -9,6 +9,7 @@ require_once(__DIR__ . '/classes/TypeDetector.php');
 require_once(__DIR__ . '/classes/MappingEngine.php');
 require_once(__DIR__ . '/classes/TemplateCreator.php');
 require_once(__DIR__ . '/classes/ImportProcessor.php');
+require_once(__DIR__ . '/classes/ImportRollback.php');
 
 /**
  * ProcessWire Database Importer
@@ -85,6 +86,9 @@ class ProcessDatabaseImporter extends Process implements Module {
             }
             if ($action === 'import') {
                 return $this->executeImport();
+            }
+            if ($action === 'rollback') {
+                return $this->executeRollback();
             }
         }
 
@@ -513,12 +517,22 @@ class ProcessDatabaseImporter extends Process implements Module {
             $importProcessor = $this->wire(new ImportProcessor());
             $result = $importProcessor->import($tableData['data'], $mapping, $template, $parent);
 
+            // Collect rollback data
+            $rollbackData = [
+                'template' => $template->name,
+                'parent_page' => $parent->path,
+                'created_fields' => $templateCreator->getCreatedFields(),
+                'created_pages' => $result['created_pages'],
+                'timestamp' => time()
+            ];
+
             // Store import results in session
             $sessionData['step'] = 'import';
             $sessionData['import_result'] = $result;
             $sessionData['mapping'] = $mapping;
             $sessionData['template'] = $template->name;
             $sessionData['parent'] = $parent->path;
+            $sessionData['rollback_data'] = $rollbackData;
             $this->session->set(self::SESSION_KEY, $sessionData);
 
             // Redirect to results
@@ -646,8 +660,92 @@ class ProcessDatabaseImporter extends Process implements Module {
         $out .= '<i class="fa fa-folder-open"></i> ' . $this->_('View Imported Pages');
         $out .= '</a>';
         $out .= ' &nbsp; ';
+
+        // Rollback button (if rollback data available)
+        if (isset($sessionData['rollback_data'])) {
+            $out .= '<a href="' . $this->page->url . '?action=rollback" class="ui-button ui-priority-warning" ';
+            $out .= 'onclick="return confirm(\'' . $this->_('Delete all imported data? This cannot be undone!') . '\')">';
+            $out .= '<i class="fa fa-trash"></i> ' . $this->_('Rollback Import');
+            $out .= '</a>';
+            $out .= ' &nbsp; ';
+        }
+
         $out .= '<a href="' . $this->page->url . '?action=clear" class="ui-button ui-priority-secondary">';
         $out .= '<i class="fa fa-arrow-left"></i> ' . $this->_('Start Over');
+        $out .= '</a>';
+        $out .= '</div>';
+
+        return $out;
+    }
+
+    /**
+     * Rollback import - delete all created items
+     */
+    protected function executeRollback() {
+        $this->headline('Database Import - Rollback');
+
+        // Get session data
+        $sessionData = $this->session->get(self::SESSION_KEY);
+        if (!$sessionData || !isset($sessionData['rollback_data'])) {
+            $this->error($this->_('No rollback data found.'));
+            $this->session->redirect($this->page->url);
+        }
+
+        $rollbackData = $sessionData['rollback_data'];
+
+        // Execute rollback
+        $rollback = $this->wire(new ImportRollback());
+        $result = $rollback->rollback($rollbackData);
+
+        // Build result page
+        $out = '';
+
+        if (empty($result['errors'])) {
+            $out .= '<div class="uk-alert uk-alert-success">';
+            $out .= '<h3>' . $this->_('Rollback Completed Successfully') . '</h3>';
+            $out .= '<p>' . $this->_('All imported data has been deleted.') . '</p>';
+            $out .= '</div>';
+        } else {
+            $out .= '<div class="uk-alert uk-alert-warning">';
+            $out .= '<h3>' . $this->_('Rollback Completed with Errors') . '</h3>';
+            $out .= '<p>' . $this->_('Some items could not be deleted.') . '</p>';
+            $out .= '</div>';
+        }
+
+        // Statistics
+        $out .= '<div class="table-analysis">';
+        $out .= '<h3>' . $this->_('Rollback Statistics') . '</h3>';
+        $out .= '<dl class="uk-description-list">';
+        $out .= '<dt>' . $this->_('Pages Deleted') . '</dt>';
+        $out .= '<dd>' . $result['pages_deleted'] . '</dd>';
+        $out .= '<dt>' . $this->_('Templates Deleted') . '</dt>';
+        $out .= '<dd>' . $result['templates_deleted'] . '</dd>';
+        $out .= '<dt>' . $this->_('Fields Deleted') . '</dt>';
+        $out .= '<dd>' . $result['fields_deleted'] . '</dd>';
+        $out .= '<dt>' . $this->_('Errors') . '</dt>';
+        $out .= '<dd>' . count($result['errors']) . '</dd>';
+        $out .= '</dl>';
+        $out .= '</div>';
+
+        // Errors
+        if (!empty($result['errors'])) {
+            $out .= '<div class="table-analysis uk-margin">';
+            $out .= '<h3>' . $this->_('Errors') . '</h3>';
+            $out .= '<ul>';
+            foreach ($result['errors'] as $error) {
+                $out .= '<li>' . $this->sanitizer->entities($error) . '</li>';
+            }
+            $out .= '</ul>';
+            $out .= '</div>';
+        }
+
+        // Clear session after rollback
+        $this->session->remove(self::SESSION_KEY);
+
+        // Action
+        $out .= '<div class="uk-margin">';
+        $out .= '<a href="' . $this->page->url . '" class="ui-button ui-priority-primary">';
+        $out .= '<i class="fa fa-upload"></i> ' . $this->_('Start New Import');
         $out .= '</a>';
         $out .= '</div>';
 
