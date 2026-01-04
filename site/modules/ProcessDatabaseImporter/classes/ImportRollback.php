@@ -37,13 +37,28 @@ class ImportRollback extends WireData {
             }
         }
 
-        // Delete parent page if empty
+        // Delete parent page and container hierarchy
         if (isset($rollbackData['parent_page'])) {
             try {
                 $parent = $this->wire('pages')->get($rollbackData['parent_page']);
+
+                // Delete parent if empty
                 if ($parent->id && $parent->numChildren() == 0) {
                     $this->wire('pages')->delete($parent, true);
                     $result['pages_deleted']++;
+
+                    // Walk up and delete empty container parents
+                    $currentParent = $parent->parent;
+                    while ($currentParent->id && $currentParent->id != 1 && $currentParent->template->name === 'import-container') {
+                        if ($currentParent->numChildren() == 0) {
+                            $nextParent = $currentParent->parent;
+                            $this->wire('pages')->delete($currentParent, true);
+                            $result['pages_deleted']++;
+                            $currentParent = $nextParent;
+                        } else {
+                            break;
+                        }
+                    }
                 }
             } catch (\Exception $e) {
                 $result['errors'][] = "Failed to delete parent page: " . $e->getMessage();
@@ -91,6 +106,22 @@ class ImportRollback extends WireData {
                     $result['errors'][] = "Failed to delete field {$fieldName}: " . $e->getMessage();
                 }
             }
+        }
+
+        // Delete import-container template if not used by any pages
+        try {
+            $containerTemplate = $this->wire('templates')->get('import-container');
+            if ($containerTemplate && $containerTemplate->id) {
+                $numPages = $this->wire('pages')->count("template=$containerTemplate");
+                if ($numPages == 0) {
+                    $fieldgroup = $containerTemplate->fieldgroup;
+                    $this->wire('templates')->delete($containerTemplate);
+                    $this->wire('fieldgroups')->delete($fieldgroup);
+                    $result['templates_deleted']++;
+                }
+            }
+        } catch (\Exception $e) {
+            $result['errors'][] = "Failed to delete import-container template: " . $e->getMessage();
         }
 
         return $result;
