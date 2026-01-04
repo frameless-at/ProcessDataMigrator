@@ -151,7 +151,8 @@ class ProcessDatabaseImporter extends Process implements Module {
                             'file' => $result['file'],
                             'temp_file' => $tempFile,
                             'analysis' => $result['analysis'],
-                            'tables' => $result['tables']
+                            'tables' => $result['tables'],
+                            'max_rows' => $maxRows  // Store for import limiting
                         ]);
 
                         // Redirect to analysis
@@ -514,8 +515,16 @@ class ProcessDatabaseImporter extends Process implements Module {
             $this->message($this->_('Created parent page: ') . $parent->path);
 
             // Step 4: Import data
+            // CRITICAL: Limit data to max_rows for import (analysis used full sample_size)
+            $maxRows = $sessionData['max_rows'] ?? 0;
+            $importData = $tableData['data'];
+            if ($maxRows > 0 && count($importData) > $maxRows) {
+                $importData = array_slice($importData, 0, $maxRows);
+                $this->message($this->_('Import limited to ' . $maxRows . ' rows'));
+            }
+
             $importProcessor = $this->wire(new ImportProcessor());
-            $result = $importProcessor->import($tableData['data'], $mapping, $template, $parent);
+            $result = $importProcessor->import($importData, $mapping, $template, $parent);
 
             // Collect rollback data
             $rollbackData = [

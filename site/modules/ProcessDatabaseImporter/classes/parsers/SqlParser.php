@@ -310,8 +310,10 @@ class SqlParser extends AbstractParser {
             return;
         }
 
-        // Check max rows limit
-        if ($maxRows > 0 && $this->tables[$tableName]['row_count'] >= $maxRows) {
+        // CRITICAL: Check SAMPLE SIZE limit, not max_rows
+        // max_rows only limits IMPORT, not ANALYSIS
+        // We need enough data for accurate type detection
+        if ($sampleSize > 0 && $this->tables[$tableName]['row_count'] >= $sampleSize) {
             return;
         }
 
@@ -319,13 +321,14 @@ class SqlParser extends AbstractParser {
         $rows = $this->parseInsertStatement($sql, $tableName);
 
         foreach ($rows as $row) {
-            // Only store sample rows for analysis
+            // Store rows up to sample_size for analysis
             if ($this->tables[$tableName]['row_count'] < $sampleSize) {
                 $this->tables[$tableName]['data'][] = $row;
             }
             $this->tables[$tableName]['row_count']++;
 
-            if ($maxRows > 0 && $this->tables[$tableName]['row_count'] >= $maxRows) {
+            // Stop when we have enough data for analysis
+            if ($sampleSize > 0 && $this->tables[$tableName]['row_count'] >= $sampleSize) {
                 break;
             }
         }
