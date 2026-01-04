@@ -53,45 +53,35 @@ class ImportRollback extends WireData {
         // Delete parent page and container hierarchy
         if (isset($rollbackData['parent_page'])) {
             try {
-                // IMPORTANT: Get fresh instance after deleting child pages
                 $parent = $this->wire('pages')->get($rollbackData['parent_page']);
 
-                if ($parent && $parent->id) {
-                    // Force refresh to get current child count
-                    $parent->uncache();
-                    $actualChildCount = $this->wire('pages')->count("parent={$parent->id}");
+                $result['errors'][] = "DEBUG: Parent page path: {$rollbackData['parent_page']}, found: " . ($parent && $parent->id ? "YES (ID: {$parent->id}, children: {$parent->numChildren()})" : "NO");
 
-                    $result['errors'][] = "DEBUG: Parent page path: {$rollbackData['parent_page']}, found: YES (ID: {$parent->id}, cached children: {$parent->numChildren()}, actual children: {$actualChildCount})";
+                // Delete parent if empty
+                if ($parent && $parent->id && $parent->numChildren() == 0) {
+                    $this->wire('pages')->delete($parent, true);
+                    $result['pages_deleted']++;
+                    $result['errors'][] = "DEBUG: Deleted parent page {$parent->id}";
 
-                    // Delete parent if empty
-                    if ($actualChildCount == 0) {
-                        $this->wire('pages')->delete($parent, true);
-                        $result['pages_deleted']++;
-                        $result['errors'][] = "DEBUG: Deleted parent page {$parent->id}";
-
-                        // Walk up and delete empty container parents
-                        $currentParent = $parent->parent;
-                        while ($currentParent && $currentParent->id && $currentParent->id != 1 && $currentParent->template->name === 'import-container') {
-                            $currentParent->uncache();
-                            $containerChildCount = $this->wire('pages')->count("parent={$currentParent->id}");
-                            $result['errors'][] = "DEBUG: Checking container parent {$currentParent->path} (children: {$containerChildCount})";
-
-                            if ($containerChildCount == 0) {
-                                $nextParent = $currentParent->parent;
-                                $this->wire('pages')->delete($currentParent, true);
-                                $result['pages_deleted']++;
-                                $result['errors'][] = "DEBUG: Deleted container parent {$currentParent->id}";
-                                $currentParent = $nextParent;
-                            } else {
-                                $result['errors'][] = "DEBUG: Container parent still has children, stopping";
-                                break;
-                            }
+                    // Walk up and delete empty container parents
+                    $currentParent = $parent->parent;
+                    while ($currentParent && $currentParent->id && $currentParent->id != 1 && $currentParent->template->name === 'import-container') {
+                        $result['errors'][] = "DEBUG: Checking container parent {$currentParent->path} (children: {$currentParent->numChildren()})";
+                        if ($currentParent->numChildren() == 0) {
+                            $nextParent = $currentParent->parent;
+                            $this->wire('pages')->delete($currentParent, true);
+                            $result['pages_deleted']++;
+                            $result['errors'][] = "DEBUG: Deleted container parent {$currentParent->id}";
+                            $currentParent = $nextParent;
+                        } else {
+                            $result['errors'][] = "DEBUG: Container parent still has children, stopping";
+                            break;
                         }
-                    } else {
-                        $result['errors'][] = "DEBUG: Parent page not empty (has {$actualChildCount} children), not deleting";
                     }
                 } else {
-                    $result['errors'][] = "DEBUG: Parent page not found: {$rollbackData['parent_page']}";
+                    if ($parent && $parent->id) {
+                        $result['errors'][] = "DEBUG: Parent page not empty (has {$parent->numChildren()} children), not deleting";
+                    }
                 }
             } catch (\Exception $e) {
                 $result['errors'][] = "Failed to delete parent page: " . $e->getMessage();

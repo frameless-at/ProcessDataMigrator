@@ -31,9 +31,8 @@ class TemplateCreator extends WireData {
 
         // Get or create template
         $template = $this->wire('templates')->get($templateName);
-        $templateExisted = ($template && $template->id);
 
-        if (!$templateExisted) {
+        if (!$template || !$template->id) {
             $template = $this->wire(new Template());
             $template->name = $templateName;
             $template->label = ucfirst($templateName ?: 'Untitled');
@@ -47,8 +46,6 @@ class TemplateCreator extends WireData {
             $template->save();
 
             $this->wire()->message("Created template: $templateName");
-        } else {
-            $this->wire()->message("DEBUG: Template '$templateName' already exists, reusing");
         }
 
         // Add title field if not present
@@ -63,13 +60,6 @@ class TemplateCreator extends WireData {
 
             if ($field && !$template->fieldgroup->hasField($field)) {
                 $template->fieldgroup->add($field);
-            }
-
-            // Track ALL fields used by this template (not just created ones)
-            // This ensures they get deleted on rollback
-            // Exclude system fields like 'title'
-            if ($field && $field->name !== 'title' && !in_array($field->name, $this->createdFields)) {
-                $this->createdFields[] = $field->name;
             }
         }
 
