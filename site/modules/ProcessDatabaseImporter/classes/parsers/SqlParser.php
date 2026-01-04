@@ -365,7 +365,13 @@ class SqlParser extends AbstractParser {
                 $values = $this->parseRowValues($rowStr);
 
                 if ($columns && count($columns) === count($values)) {
-                    $rows_processed[] = array_combine($columns, $values);
+                    $combined = array_combine($columns, $values);
+                    if ($combined === false) {
+                        // Fallback to numeric keys if combine fails
+                        $rows_processed[] = $values;
+                    } else {
+                        $rows_processed[] = $combined;
+                    }
                 } else {
                     // If no columns or mismatch, use numeric keys
                     $rows_processed[] = $values;
@@ -461,12 +467,31 @@ class SqlParser extends AbstractParser {
             $char = $str[$i];
 
             if ($escaped) {
-                $current .= $char;
+                // Handle escape sequences properly
+                switch ($char) {
+                    case 'n':
+                        $current .= "\n";
+                        break;
+                    case 'r':
+                        $current .= "\r";
+                        break;
+                    case 't':
+                        $current .= "\t";
+                        break;
+                    case '\\':
+                    case "'":
+                    case '"':
+                        $current .= $char;
+                        break;
+                    default:
+                        // Unknown escape, keep as-is
+                        $current .= '\\' . $char;
+                }
                 $escaped = false;
                 continue;
             }
 
-            if ($char === '\\') {
+            if ($char === '\\' && $inString) {
                 $escaped = true;
                 continue;
             }
@@ -509,14 +534,13 @@ class SqlParser extends AbstractParser {
             return null;
         }
 
-        // Remove quotes
+        // Remove quotes (quotes are already removed during parsing, this is a fallback)
         if ((substr($value, 0, 1) === "'" && substr($value, -1) === "'") ||
             (substr($value, 0, 1) === '"' && substr($value, -1) === '"')) {
             $value = substr($value, 1, -1);
         }
 
-        // Unescape
-        $value = str_replace(['\\\'', '\\"', '\\\\'], ["'", '"', '\\'], $value);
+        // Note: Unescaping is now handled during parsing, not here
 
         return $value;
     }

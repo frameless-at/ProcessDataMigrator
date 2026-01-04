@@ -68,10 +68,6 @@ class ImportProcessor extends WireData {
      * @return Page|null Created page
      */
     protected function createPage($row, $mapping, $template, $parent, $titleField) {
-        // DEBUG: Log row data
-        $this->wire()->warning("DEBUG Row data: " . json_encode($row));
-        $this->wire()->warning("DEBUG Title field: $titleField");
-
         // Get title value
         $title = isset($row[$titleField]) ? $row[$titleField] : 'Untitled';
 
@@ -102,18 +98,15 @@ class ImportProcessor extends WireData {
 
             // Skip if field doesn't exist in template
             if (!$template->fieldgroup->hasField($targetField)) {
-                $this->wire()->warning("DEBUG: Field '$targetField' not in template, skipping");
                 continue;
             }
 
             // Skip if no data
             if (!isset($row[$sourceColumn])) {
-                $this->wire()->warning("DEBUG: Source column '$sourceColumn' not in row data, skipping");
                 continue;
             }
 
             $value = $row[$sourceColumn];
-            $this->wire()->warning("DEBUG: Setting $targetField = " . json_encode($value));
 
             // Convert value based on fieldtype
             $value = $this->convertValue($value, $fieldMapping);
@@ -171,9 +164,11 @@ class ImportProcessor extends WireData {
             case 'FieldtypeDatetime':
                 // Convert to Unix timestamp
                 if (is_numeric($value)) {
-                    return $value;
+                    return (int) $value;
                 }
-                return strtotime($value);
+                $timestamp = strtotime($value);
+                // If strtotime fails, return null instead of false
+                return $timestamp !== false ? $timestamp : null;
 
             case 'FieldtypeOptions':
                 // For options, return the value as-is (will be matched by title)
