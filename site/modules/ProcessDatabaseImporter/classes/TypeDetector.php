@@ -89,6 +89,16 @@ class TypeDetector extends WireData {
             }
         }
 
+        // CRITICAL: For ENUM/SET fields, extract options even though fieldtype is already set
+        if (in_array($baseType, ['enum', 'set']) && $result['fieldtype'] === 'FieldtypeOptions') {
+            $optionsResult = $this->detectOptionsField($values);
+            if ($optionsResult['is_options'] && isset($optionsResult['options'])) {
+                // Merge options into result
+                $result['options'] = $optionsResult['options'];
+                $result['options_count'] = $optionsResult['options_count'];
+            }
+        }
+
         return $result;
     }
 
