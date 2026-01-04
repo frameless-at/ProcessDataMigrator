@@ -83,7 +83,7 @@ class TypeDetector extends WireData {
         // Check for options/select field - but only if not already detected as email, URL, etc.
         // Options should not override specific types with high confidence
         if ($result['confidence'] < 80 || $result['fieldtype'] === 'FieldtypeText') {
-            $optionsResult = $this->detectOptionsField($values);
+            $optionsResult = $this->detectOptionsField($values, $columnName);
             if ($optionsResult['is_options']) {
                 return $optionsResult;
             }
@@ -91,7 +91,7 @@ class TypeDetector extends WireData {
 
         // CRITICAL: For ENUM/SET fields, extract options even though fieldtype is already set
         if (in_array($baseType, ['enum', 'set']) && $result['fieldtype'] === 'FieldtypeOptions') {
-            $optionsResult = $this->detectOptionsField($values);
+            $optionsResult = $this->detectOptionsField($values, $columnName);
             if ($optionsResult['is_options'] && isset($optionsResult['options'])) {
                 // Merge options into result
                 $result['options'] = $optionsResult['options'];
@@ -297,7 +297,7 @@ class TypeDetector extends WireData {
     /**
      * Detect if this should be an options/select field
      */
-    protected function detectOptionsField($values) {
+    protected function detectOptionsField($values, $columnName = '') {
         $unique = array_unique($values);
         $total = count($values);
         $uniqueCount = count($unique);
@@ -306,7 +306,26 @@ class TypeDetector extends WireData {
             return ['is_options' => false];
         }
 
-        // Very few unique values (<=5) - almost certainly an options field
+        // CRITICAL: Certain column names should NEVER be options fields
+        // Even if they have few unique values in the sample
+        $neverOptionsPatterns = [
+            'name', 'title', 'headline', 'subject',
+            'description', 'desc', 'text', 'content', 'body',
+            'product', 'article', 'item',
+            'first_name', 'last_name', 'full_name',
+            'company', 'organization',
+            'street', 'address', 'city', 'town',
+            'note', 'comment', 'remark'
+        ];
+
+        $colName = strtolower($columnName);
+        foreach ($neverOptionsPatterns as $pattern) {
+            if (strpos($colName, $pattern) !== false) {
+                return ['is_options' => false];
+            }
+        }
+
+        // Very few unique values (<=5) - likely an options field
         if ($uniqueCount <= 5) {
             return [
                 'is_options' => true,
