@@ -198,6 +198,9 @@ class TemplateCreator extends WireData {
             return $parent;
         }
 
+        // Get or create import-container template
+        $containerTemplate = $this->getOrCreateContainerTemplate();
+
         // Create parent structure
         $segments = array_filter(explode('/', trim($path, '/')));
         $currentPath = '/';
@@ -208,23 +211,8 @@ class TemplateCreator extends WireData {
             $page = $this->wire('pages')->get($currentPath);
 
             if (!$page->id) {
-                // Create page using a safe template
-                // Try to find a suitable template (basic-page, home, or the first available)
-                $template = $this->wire('templates')->get('basic-page');
-                if (!$template || !$template->id) {
-                    $template = $this->wire('templates')->get('home');
-                }
-                if (!$template || !$template->id) {
-                    // Get first non-system template
-                    $template = $this->wire('templates')->find("flags=0, limit=1")->first();
-                }
-
-                if (!$template || !$template->id) {
-                    throw new \Exception("No suitable template found for parent page creation");
-                }
-
                 $page = $this->wire(new Page());
-                $page->template = $template;
+                $page->template = $containerTemplate;
                 $page->parent = $currentParent;
                 $page->name = $segment;
                 $page->title = ucfirst($segment);
@@ -237,5 +225,39 @@ class TemplateCreator extends WireData {
         }
 
         return $currentParent;
+    }
+
+    /**
+     * Get or create import-container template
+     *
+     * @return Template
+     */
+    protected function getOrCreateContainerTemplate() {
+        $templateName = 'import-container';
+        $template = $this->wire('templates')->get($templateName);
+
+        if ($template && $template->id) {
+            return $template;
+        }
+
+        // Create template
+        $template = $this->wire(new Template());
+        $template->name = $templateName;
+        $template->label = 'Import Container';
+
+        // Create fieldgroup with only title
+        $fieldgroup = $this->wire(new Fieldgroup());
+        $fieldgroup->name = $templateName;
+        $fieldgroup->add($this->wire('fields')->get('title'));
+        $fieldgroup->save();
+
+        $template->fieldgroup = $fieldgroup;
+        $template->noChildren = 0; // Allow children
+        $template->noParents = 1; // Don't show in page add menu
+        $template->save();
+
+        $this->wire()->message("Created template: $templateName");
+
+        return $template;
     }
 }
