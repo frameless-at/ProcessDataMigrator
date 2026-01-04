@@ -545,13 +545,8 @@ class ProcessDatabaseImporter extends Process implements Module {
             ];
 
             // Preserve options for FieldtypeOptions fields
-            if ($fieldtype === 'FieldtypeOptions') {
-                if (isset($analysis['columns'][$sourceColumn]['options'])) {
-                    $mapping['fields'][$sourceColumn]['options'] = $analysis['columns'][$sourceColumn]['options'];
-                    $this->wire()->message("DEBUG: Preserved " . count($analysis['columns'][$sourceColumn]['options']) . " options for field {$sourceColumn}");
-                } else {
-                    $this->wire()->warning("DEBUG: No options found in analysis for field {$sourceColumn}");
-                }
+            if ($fieldtype === 'FieldtypeOptions' && isset($analysis['columns'][$sourceColumn]['options'])) {
+                $mapping['fields'][$sourceColumn]['options'] = $analysis['columns'][$sourceColumn]['options'];
             }
 
             // Preserve reference_table for FieldtypePage fields
