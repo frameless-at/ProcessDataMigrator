@@ -78,13 +78,21 @@ class ProcessDatabaseImporter extends Process implements Module {
      * Main execute method
      */
     public function ___execute() {
-        // Check for actions first
-        if ($this->input->get('action')) {
-            $action = $this->input->get('action');
+        // Check for actions first (GET or POST)
+        $action = $this->input->get('action') ?: $this->input->post('action');
+
+        if ($action) {
             if ($action === 'clear') {
                 return $this->executeClear();
             }
             if ($action === 'import') {
+                // Store selected tables if submitted via POST
+                if ($this->input->post('selected_tables')) {
+                    $selectedTables = $this->input->post->array('selected_tables');
+                    $sessionData = $this->session->get(self::SESSION_KEY);
+                    $sessionData['selected_tables'] = $selectedTables;
+                    $this->session->set(self::SESSION_KEY, $sessionData);
+                }
                 return $this->executeImport();
             }
             if ($action === 'rollback') {
@@ -311,7 +319,8 @@ class ProcessDatabaseImporter extends Process implements Module {
      * Build analysis view
      */
     protected function buildAnalysisView($analysis) {
-        $out = '<div class="database-importer-analysis">';
+        $out = '<form method="post" action="' . $this->page->url . '">';
+        $out .= '<div class="database-importer-analysis">';
 
         // Summary
         $totalRows = array_sum(array_column($analysis, 'row_count'));
@@ -323,8 +332,12 @@ class ProcessDatabaseImporter extends Process implements Module {
         $out .= '<h3>' . $this->_('Analysis Complete') . '</h3>';
         $out .= '<p>';
         $out .= sprintf(
-            $this->_('%d tables found with %d total rows and %d columns'),
-            count($analysis),
+            $this->_('%d tables found - Select tables to import below'),
+            count($analysis)
+        );
+        $out .= '<br>';
+        $out .= sprintf(
+            $this->_('%d total rows and %d columns'),
             $totalRows,
             $totalColumns
         );
@@ -337,6 +350,7 @@ class ProcessDatabaseImporter extends Process implements Module {
         }
 
         $out .= '</div>';
+        $out .= '</form>';
 
         return $out;
     }
@@ -345,8 +359,15 @@ class ProcessDatabaseImporter extends Process implements Module {
      * Build single table analysis view
      */
     protected function buildTableAnalysis($tableName, $analysis) {
-        $out = '<div class="table-analysis uk-margin">';
-        $out .= '<h3>' . $this->sanitizer->entities($tableName) . '</h3>';
+        $out = '<div class="table-analysis uk-margin" style="border: 2px solid #ddd; padding: 15px; border-radius: 4px;">';
+
+        // Checkbox for table selection
+        $out .= '<div style="margin-bottom: 10px;">';
+        $out .= '<label style="font-size: 16px; font-weight: bold;">';
+        $out .= '<input type="checkbox" name="selected_tables[]" value="' . $this->sanitizer->entities($tableName) . '" checked> ';
+        $out .= $this->sanitizer->entities($tableName);
+        $out .= '</label>';
+        $out .= '</div>';
 
         $out .= '<dl class="uk-description-list">';
         $out .= '<dt>' . $this->_('Rows') . ':</dt>';
@@ -447,10 +468,10 @@ class ProcessDatabaseImporter extends Process implements Module {
     protected function buildAnalysisActions() {
         $out = '<div class="uk-margin">';
 
-        // Import button
-        $out .= '<a href="' . $this->page->url . '?action=import" class="ui-button ui-priority-primary">';
-        $out .= '<i class="fa fa-upload"></i> ' . $this->_('Start Import');
-        $out .= '</a>';
+        // Import button (submits form with selected tables)
+        $out .= '<button type="submit" name="action" value="import" class="ui-button ui-priority-primary">';
+        $out .= '<i class="fa fa-upload"></i> ' . $this->_('Import Selected Tables');
+        $out .= '</button>';
 
         $out .= ' &nbsp; ';
 
@@ -477,7 +498,7 @@ class ProcessDatabaseImporter extends Process implements Module {
             $this->session->redirect($this->page->url);
         }
 
-        // Extract first table (for now - later we can add table selection)
+        // Get all tables data
         $allAnalysis = $sessionData['analysis'] ?? [];
         $allTables = $sessionData['tables'] ?? [];
 
@@ -486,62 +507,76 @@ class ProcessDatabaseImporter extends Process implements Module {
             $this->session->redirect($this->page->url);
         }
 
-        // Get first table
-        $tableName = array_key_first($allAnalysis);
-        $analysis = $allAnalysis[$tableName] ?? [];
-        $tableData = $allTables[$tableName] ?? [];
+        // Get selected tables (or all if none selected)
+        $selectedTables = $sessionData['selected_tables'] ?? array_keys($allAnalysis);
 
-        if (empty($analysis) || empty($tableData)) {
-            $this->error($this->_('Invalid table data. Please start over.'));
+        if (empty($selectedTables)) {
+            $this->error($this->_('No tables selected for import.'));
             $this->session->redirect($this->page->url);
         }
 
+        // Import each selected table
+        $allRollbackData = [];
+        $totalImported = 0;
+        $maxRows = $sessionData['max_rows'] ?? 0;
+
         try {
-            // Step 1: Create automatic mapping
-            $mappingEngine = $this->wire(new MappingEngine());
-            $mapping = $mappingEngine->createMapping($analysis, $tableName);
+            foreach ($selectedTables as $tableName) {
+                $analysis = $allAnalysis[$tableName] ?? null;
+                $tableData = $allTables[$tableName] ?? null;
 
-            $this->message($this->_('Created field mapping'));
+                if (!$analysis || !$tableData) {
+                    $this->error($this->_("Table '{$tableName}' not found in analysis"));
+                    continue;
+                }
 
-            // Step 2: Create template and fields
-            $templateCreator = $this->wire(new TemplateCreator());
-            $template = $templateCreator->createTemplate($mapping);
+                $this->message($this->_("Importing table: {$tableName}"));
 
-            $this->message($this->_('Created template: ') . $template->name);
+                // Step 1: Create automatic mapping
+                $mappingEngine = $this->wire(new MappingEngine());
+                $mapping = $mappingEngine->createMapping($analysis, $tableName);
 
-            // Step 3: Create parent page
-            $parent = $templateCreator->createParentPage($mapping['parent'], $template->name);
+                // Step 2: Create template and fields
+                $templateCreator = $this->wire(new TemplateCreator());
+                $template = $templateCreator->createTemplate($mapping);
 
-            $this->message($this->_('Created parent page: ') . $parent->path);
+                $this->message($this->_('Created template: ') . $template->name);
 
-            // Step 4: Import data
-            // CRITICAL: Limit data to max_rows for import (analysis used full sample_size)
-            $maxRows = $sessionData['max_rows'] ?? 0;
-            $importData = $tableData['data'];
-            if ($maxRows > 0 && count($importData) > $maxRows) {
-                $importData = array_slice($importData, 0, $maxRows);
-                $this->message($this->_('Import limited to ' . $maxRows . ' rows'));
+                // Step 3: Create parent page
+                $parent = $templateCreator->createParentPage($mapping['parent'], $template->name);
+
+                $this->message($this->_('Created parent page: ') . $parent->path);
+
+                // Step 4: Import data
+                // CRITICAL: Limit data to max_rows for import (analysis used full sample_size)
+                $importData = $tableData['data'];
+                if ($maxRows > 0 && count($importData) > $maxRows) {
+                    $importData = array_slice($importData, 0, $maxRows);
+                    $this->message($this->_("Import limited to {$maxRows} rows for table {$tableName}"));
+                }
+
+                $importProcessor = $this->wire(new ImportProcessor());
+                $result = $importProcessor->import($importData, $mapping, $template, $parent);
+
+                $totalImported += $result['imported'];
+
+                // Collect rollback data for this table
+                $allRollbackData[] = [
+                    'table' => $tableName,
+                    'template' => $template->name,
+                    'parent_page' => $parent->path,
+                    'created_fields' => $templateCreator->getCreatedFields(),
+                    'created_pages' => $result['created_pages'],
+                    'timestamp' => time()
+                ];
+
+                $this->message($this->_("Imported {$result['imported']} pages for table {$tableName}"));
             }
-
-            $importProcessor = $this->wire(new ImportProcessor());
-            $result = $importProcessor->import($importData, $mapping, $template, $parent);
-
-            // Collect rollback data
-            $rollbackData = [
-                'template' => $template->name,
-                'parent_page' => $parent->path,
-                'created_fields' => $templateCreator->getCreatedFields(),
-                'created_pages' => $result['created_pages'],
-                'timestamp' => time()
-            ];
 
             // Store import results in session
             $sessionData['step'] = 'import';
-            $sessionData['import_result'] = $result;
-            $sessionData['mapping'] = $mapping;
-            $sessionData['template'] = $template->name;
-            $sessionData['parent'] = $parent->path;
-            $sessionData['rollback_data'] = $rollbackData;
+            $sessionData['total_imported'] = $totalImported;
+            $sessionData['rollback_data'] = $allRollbackData;
             $this->session->set(self::SESSION_KEY, $sessionData);
 
             // Redirect to results
@@ -702,9 +737,30 @@ class ProcessDatabaseImporter extends Process implements Module {
 
         $rollbackData = $sessionData['rollback_data'];
 
-        // Execute rollback
+        // Handle both single rollback (old format) and multiple (new format)
+        if (!isset($rollbackData[0])) {
+            // Old format: single rollback data
+            $rollbackData = [$rollbackData];
+        }
+
+        // Execute rollback for all tables
         $rollback = $this->wire(new ImportRollback());
-        $result = $rollback->rollback($rollbackData);
+        $combinedResult = [
+            'pages_deleted' => 0,
+            'templates_deleted' => 0,
+            'fields_deleted' => 0,
+            'errors' => []
+        ];
+
+        foreach ($rollbackData as $tableRollback) {
+            $result = $rollback->rollback($tableRollback);
+            $combinedResult['pages_deleted'] += $result['pages_deleted'];
+            $combinedResult['templates_deleted'] += $result['templates_deleted'];
+            $combinedResult['fields_deleted'] += $result['fields_deleted'];
+            $combinedResult['errors'] = array_merge($combinedResult['errors'], $result['errors']);
+        }
+
+        $result = $combinedResult;
 
         // Build result page
         $out = '';
