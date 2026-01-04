@@ -234,6 +234,12 @@ class SqlParser extends AbstractParser {
                 // Parse MySQL types to basic types
                 $baseType = $this->parseColumnType($columnType);
 
+                // Extract enum/set values if present
+                $enumValues = null;
+                if (in_array($baseType, ['enum', 'set'])) {
+                    $enumValues = $this->extractEnumValues($columnType);
+                }
+
                 // Check for NULL/NOT NULL
                 $nullable = stripos($line, 'NOT NULL') === false;
 
@@ -246,7 +252,7 @@ class SqlParser extends AbstractParser {
                     $default = trim($defaultMatches[1], "'\"");
                 }
 
-                $this->tables[$tableName]['structure'][$columnName] = [
+                $columnDef = [
                     'name' => $columnName,
                     'type' => $columnType,
                     'base_type' => $baseType,
@@ -254,8 +260,43 @@ class SqlParser extends AbstractParser {
                     'auto_increment' => $autoIncrement,
                     'default' => $default,
                 ];
+
+                // Add enum values if present
+                if ($enumValues !== null) {
+                    $columnDef['enum_values'] = $enumValues;
+                }
+
+                $this->tables[$tableName]['structure'][$columnName] = $columnDef;
             }
         }
+    }
+
+    /**
+     * Extract enum/set values from column type definition
+     * e.g., enum('active','inactive','pending') => ['active', 'inactive', 'pending']
+     */
+    protected function extractEnumValues($type) {
+        // Match enum('value1','value2',...)
+        if (preg_match('/(?:enum|set)\s*\(([^)]+)\)/i', $type, $matches)) {
+            $valuesStr = $matches[1];
+
+            // Split by comma and clean up quotes
+            $values = [];
+            $parts = explode(',', $valuesStr);
+
+            foreach ($parts as $part) {
+                $part = trim($part);
+                // Remove surrounding quotes
+                $part = trim($part, "'\"");
+                if ($part !== '') {
+                    $values[] = $part;
+                }
+            }
+
+            return $values;
+        }
+
+        return null;
     }
 
     /**

@@ -123,8 +123,12 @@ class DataAnalyzer extends WireData {
         $analysis['suggested_fieldtype'] = $detection['fieldtype'];
         $analysis['patterns'] = $detection['patterns'] ?? [];
 
-        // CRITICAL: Include options if this is an Options field
-        if (isset($detection['options'])) {
+        // CRITICAL: Use enum_values from SQL definition if available
+        // This ensures all enum values are included, not just those present in data
+        if (isset($columnInfo['enum_values']) && !empty($columnInfo['enum_values'])) {
+            $analysis['options'] = $columnInfo['enum_values'];
+        } elseif (isset($detection['options'])) {
+            // Fallback to detected options from data
             $analysis['options'] = $detection['options'];
         }
 
