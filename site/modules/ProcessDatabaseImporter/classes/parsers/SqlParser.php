@@ -358,21 +358,89 @@ class SqlParser extends AbstractParser {
         if (preg_match('/VALUES\s+(.+);?$/is', $sql, $matches)) {
             $valuesStr = rtrim($matches[1], ';');
 
-            // Split by ),( to get individual rows
-            // Handle nested parentheses carefully
-            $rowMatches = [];
-            preg_match_all('/\(([^)]+(?:\([^)]*\)[^)]*)*)\)/s', $valuesStr, $rowMatches);
+            // Parse rows character by character to handle parentheses in strings correctly
+            $rows = $this->extractRows($valuesStr);
 
-            foreach ($rowMatches[1] as $rowStr) {
+            foreach ($rows as $rowStr) {
                 $values = $this->parseRowValues($rowStr);
 
                 if ($columns && count($columns) === count($values)) {
-                    $rows[] = array_combine($columns, $values);
+                    $rows_processed[] = array_combine($columns, $values);
                 } else {
                     // If no columns or mismatch, use numeric keys
-                    $rows[] = $values;
+                    $rows_processed[] = $values;
                 }
             }
+
+            return $rows_processed ?? [];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Extract individual row strings from VALUES clause
+     * Handles parentheses inside quoted strings correctly
+     */
+    protected function extractRows($valuesStr) {
+        $rows = [];
+        $current = '';
+        $depth = 0;
+        $inString = false;
+        $stringChar = null;
+        $escaped = false;
+
+        $len = strlen($valuesStr);
+        for ($i = 0; $i < $len; $i++) {
+            $char = $valuesStr[$i];
+
+            if ($escaped) {
+                $current .= $char;
+                $escaped = false;
+                continue;
+            }
+
+            if ($char === '\\') {
+                $escaped = true;
+                $current .= $char;
+                continue;
+            }
+
+            // Handle string delimiters
+            if (($char === "'" || $char === '"') && !$inString) {
+                $inString = true;
+                $stringChar = $char;
+                $current .= $char;
+                continue;
+            }
+
+            if ($char === $stringChar && $inString) {
+                $inString = false;
+                $stringChar = null;
+                $current .= $char;
+                continue;
+            }
+
+            // Only count parentheses outside of strings
+            if (!$inString) {
+                if ($char === '(') {
+                    $depth++;
+                    if ($depth === 1) {
+                        // Start of a new row, don't include the opening paren
+                        continue;
+                    }
+                } elseif ($char === ')') {
+                    $depth--;
+                    if ($depth === 0) {
+                        // End of this row
+                        $rows[] = $current;
+                        $current = '';
+                        continue;
+                    }
+                }
+            }
+
+            $current .= $char;
         }
 
         return $rows;
