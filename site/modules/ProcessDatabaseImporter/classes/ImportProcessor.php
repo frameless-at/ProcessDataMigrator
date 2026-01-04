@@ -68,6 +68,10 @@ class ImportProcessor extends WireData {
      * @return Page|null Created page
      */
     protected function createPage($row, $mapping, $template, $parent, $titleField) {
+        // DEBUG: Log row data
+        $this->wire()->warning("DEBUG Row data: " . json_encode($row));
+        $this->wire()->warning("DEBUG Title field: $titleField");
+
         // Get title value
         $title = isset($row[$titleField]) ? $row[$titleField] : 'Untitled';
 
@@ -98,15 +102,18 @@ class ImportProcessor extends WireData {
 
             // Skip if field doesn't exist in template
             if (!$template->fieldgroup->hasField($targetField)) {
+                $this->wire()->warning("DEBUG: Field '$targetField' not in template, skipping");
                 continue;
             }
 
             // Skip if no data
             if (!isset($row[$sourceColumn])) {
+                $this->wire()->warning("DEBUG: Source column '$sourceColumn' not in row data, skipping");
                 continue;
             }
 
             $value = $row[$sourceColumn];
+            $this->wire()->warning("DEBUG: Setting $targetField = " . json_encode($value));
 
             // Convert value based on fieldtype
             $value = $this->convertValue($value, $fieldMapping);
