@@ -84,9 +84,6 @@ class ProcessDatabaseImporter extends Process implements Module {
             if ($action === 'clear') {
                 return $this->executeClear();
             }
-            if ($action === 'mapping') {
-                return $this->executeMappingEditor();
-            }
             if ($action === 'import') {
                 return $this->executeImport();
             }
@@ -449,16 +446,9 @@ class ProcessDatabaseImporter extends Process implements Module {
     protected function buildAnalysisActions() {
         $out = '<div class="uk-margin">';
 
-        // Mapping editor button
-        $out .= '<a href="' . $this->page->url . '?action=mapping" class="ui-button ui-priority-primary">';
-        $out .= '<i class="fa fa-cog"></i> ' . $this->_('Configure Mapping');
-        $out .= '</a>';
-
-        $out .= ' &nbsp; ';
-
-        // Quick import button (skip mapping)
-        $out .= '<a href="' . $this->page->url . '?action=import" class="ui-button">';
-        $out .= '<i class="fa fa-bolt"></i> ' . $this->_('Quick Import (Auto-Mapping)');
+        // Import button
+        $out .= '<a href="' . $this->page->url . '?action=import" class="ui-button ui-priority-primary">';
+        $out .= '<i class="fa fa-upload"></i> ' . $this->_('Start Import');
         $out .= '</a>';
 
         $out .= ' &nbsp; ';
@@ -471,220 +461,6 @@ class ProcessDatabaseImporter extends Process implements Module {
         $out .= '</div>';
 
         return $out;
-    }
-
-    /**
-     * Mapping editor - configure field mapping before import
-     */
-    protected function executeMappingEditor() {
-        $this->headline('Database Import - Configure Mapping');
-
-        // Get session data
-        $sessionData = $this->session->get(self::SESSION_KEY);
-        if (!$sessionData || !isset($sessionData['analysis'])) {
-            $this->error($this->_('No analysis data found. Please start over.'));
-            $this->session->redirect($this->page->url);
-        }
-
-        // Extract first table
-        $allAnalysis = $sessionData['analysis'] ?? [];
-        $tableName = array_key_first($allAnalysis);
-        $analysis = $allAnalysis[$tableName] ?? [];
-
-        // Create default mapping
-        $mappingEngine = $this->wire(new MappingEngine());
-        $defaultMapping = $mappingEngine->createMapping($analysis, $tableName);
-
-        // Handle form submission
-        if ($this->input->post('submit_mapping')) {
-            $customMapping = $this->processMappingForm();
-            $sessionData['custom_mapping'] = $customMapping;
-            $this->session->set(self::SESSION_KEY, $sessionData);
-            $this->session->redirect($this->page->url . '?action=import');
-        }
-
-        // Build mapping form
-        return $this->buildMappingForm($defaultMapping, $analysis);
-    }
-
-    /**
-     * Process submitted mapping form
-     */
-    protected function processMappingForm() {
-        // Get session data for original analysis (to preserve options, etc.)
-        $sessionData = $this->session->get(self::SESSION_KEY);
-        $allAnalysis = $sessionData['analysis'] ?? [];
-        $tableName = array_key_first($allAnalysis);
-        $analysis = $allAnalysis[$tableName] ?? [];
-
-        $mapping = [
-            'template' => $this->input->post('template', 'pageName'),
-            'parent' => $this->input->post('parent', 'text'),
-            'title_field' => $this->input->post('title_field', 'fieldName'),
-            'fields' => []
-        ];
-
-        $fieldCount = (int) $this->input->post('field_count');
-
-        for ($i = 0; $i < $fieldCount; $i++) {
-            $skip = $this->input->post("field_{$i}_skip");
-            if ($skip) continue;
-
-            $sourceColumn = $this->input->post("field_{$i}_source", 'text');
-            $targetField = $this->input->post("field_{$i}_target", 'fieldName');
-            $fieldtype = $this->input->post("field_{$i}_fieldtype", 'text');
-            $label = $this->input->post("field_{$i}_label", 'text');
-            $required = $this->input->post("field_{$i}_required") ? true : false;
-
-            $mapping['fields'][$sourceColumn] = [
-                'source_column' => $sourceColumn,
-                'target_field' => $targetField,
-                'fieldtype' => $fieldtype,
-                'label' => $label,
-                'required' => $required
-            ];
-
-            // Preserve options for FieldtypeOptions fields
-            if ($fieldtype === 'FieldtypeOptions' && isset($analysis['columns'][$sourceColumn]['options'])) {
-                $mapping['fields'][$sourceColumn]['options'] = $analysis['columns'][$sourceColumn]['options'];
-            }
-
-            // Preserve reference_table for FieldtypePage fields
-            if ($fieldtype === 'FieldtypePage' && isset($analysis['foreign_keys'][$sourceColumn])) {
-                $fk = $analysis['foreign_keys'][$sourceColumn];
-                $mapping['fields'][$sourceColumn]['reference_table'] = $fk['table'];
-                $mapping['fields'][$sourceColumn]['reference_column'] = $fk['column'];
-            }
-        }
-
-        return $mapping;
-    }
-
-    /**
-     * Build mapping configuration form
-     */
-    protected function buildMappingForm($mapping, $analysis) {
-        $form = $this->modules->get('InputfieldForm');
-        $form->attr('method', 'post');
-        $form->attr('action', $this->page->url . '?action=mapping');
-
-        // Template settings fieldset
-        $fieldset = $this->modules->get('InputfieldFieldset');
-        $fieldset->label = $this->_('Template Settings');
-
-        $f = $this->modules->get('InputfieldText');
-        $f->attr('name', 'template');
-        $f->label = $this->_('Template Name');
-        $f->attr('value', $mapping['template']);
-        $f->required = true;
-        $fieldset->add($f);
-
-        $f = $this->modules->get('InputfieldText');
-        $f->attr('name', 'parent');
-        $f->label = $this->_('Parent Path');
-        $f->attr('value', $mapping['parent']);
-        $f->required = true;
-        $fieldset->add($f);
-
-        $f = $this->modules->get('InputfieldSelect');
-        $f->attr('name', 'title_field');
-        $f->label = $this->_('Title Field (Source Column)');
-        foreach ($analysis['columns'] as $column) {
-            $f->addOption($column['name'], $column['name']);
-        }
-        $f->attr('value', $mapping['title_field']);
-        $fieldset->add($f);
-
-        $form->add($fieldset);
-
-        // Field mappings
-        $fieldset = $this->modules->get('InputfieldFieldset');
-        $fieldset->label = $this->_('Field Mappings');
-
-        $fieldCount = 0;
-        foreach ($mapping['fields'] as $sourceColumn => $fieldMapping) {
-            $fieldset->add($this->buildFieldMappingRow($fieldCount, $sourceColumn, $fieldMapping, $analysis['columns'][$sourceColumn] ?? []));
-            $fieldCount++;
-        }
-
-        $f = $this->modules->get('InputfieldHidden');
-        $f->attr('name', 'field_count');
-        $f->attr('value', $fieldCount);
-        $fieldset->add($f);
-
-        $form->add($fieldset);
-
-        // Submit
-        $f = $this->modules->get('InputfieldSubmit');
-        $f->attr('name', 'submit_mapping');
-        $f->attr('value', $this->_('Start Import with Custom Mapping'));
-        $form->add($f);
-
-        return $form->render();
-    }
-
-    /**
-     * Build single field mapping row
-     */
-    protected function buildFieldMappingRow($index, $sourceColumn, $fieldMapping, $columnInfo) {
-        $markup = $this->modules->get('InputfieldMarkup');
-        $markup->label = $sourceColumn;
-
-        $out = '<div style="display: grid; grid-template-columns: 2fr 2fr 1fr 80px; gap: 10px; align-items: end;">';
-
-        // Target field name
-        $out .= '<div>';
-        $out .= '<label>Target Field</label><br>';
-        $out .= '<input type="text" name="field_' . $index . '_target" value="' . $this->sanitizer->entities($fieldMapping['target_field']) . '" style="width:100%">';
-        $out .= '<input type="hidden" name="field_' . $index . '_source" value="' . $this->sanitizer->entities($sourceColumn) . '">';
-        $out .= '</div>';
-
-        // Fieldtype
-        $out .= '<div>';
-        $out .= '<label>Fieldtype</label><br>';
-        $out .= '<select name="field_' . $index . '_fieldtype" style="width:100%">';
-        $fieldtypes = [
-            'FieldtypeText' => 'Text',
-            'FieldtypeTextarea' => 'Textarea',
-            'FieldtypeEmail' => 'Email',
-            'FieldtypeURL' => 'URL',
-            'FieldtypeInteger' => 'Integer',
-            'FieldtypeFloat' => 'Float',
-            'FieldtypeDatetime' => 'Datetime',
-            'FieldtypeCheckbox' => 'Checkbox',
-            'FieldtypeOptions' => 'Options',
-            'FieldtypePage' => 'Page Reference'
-        ];
-        foreach ($fieldtypes as $value => $label) {
-            $selected = ($fieldMapping['fieldtype'] === $value) ? ' selected' : '';
-            $out .= '<option value="' . $value . '"' . $selected . '>' . $label . '</option>';
-        }
-        $out .= '</select>';
-        $out .= '</div>';
-
-        // Label
-        $out .= '<div>';
-        $out .= '<label>Label</label><br>';
-        $out .= '<input type="text" name="field_' . $index . '_label" value="' . $this->sanitizer->entities($fieldMapping['label']) . '" style="width:100%">';
-        $out .= '</div>';
-
-        // Skip checkbox
-        $out .= '<div style="text-align:center">';
-        $out .= '<label>Skip</label><br>';
-        $out .= '<input type="checkbox" name="field_' . $index . '_skip" value="1">';
-        $out .= '</div>';
-
-        $out .= '</div>';
-
-        // Additional info
-        $out .= '<div style="margin-top:5px; font-size:11px; color:#666;">';
-        $out .= 'SQL: <code>' . $this->sanitizer->entities($columnInfo['sql_type'] ?? 'unknown') . '</code> | ';
-        $out .= 'Detected: ' . $this->sanitizer->entities($columnInfo['detected_type'] ?? 'unknown') . ' ';
-        $out .= '(' . ($columnInfo['detection_confidence'] ?? 0) . '%)';
-        $out .= '</div>';
-
-        $markup->value = $out;
-        return $markup;
     }
 
     /**
@@ -720,17 +496,11 @@ class ProcessDatabaseImporter extends Process implements Module {
         }
 
         try {
-            // Step 1: Get mapping (custom or automatic)
-            if (isset($sessionData['custom_mapping'])) {
-                // Use custom mapping from mapping editor
-                $mapping = $sessionData['custom_mapping'];
-                $this->message($this->_('Using custom field mapping'));
-            } else {
-                // Create automatic mapping
-                $mappingEngine = $this->wire(new MappingEngine());
-                $mapping = $mappingEngine->createMapping($analysis, $tableName);
-                $this->message($this->_('Created automatic field mapping'));
-            }
+            // Step 1: Create automatic mapping
+            $mappingEngine = $this->wire(new MappingEngine());
+            $mapping = $mappingEngine->createMapping($analysis, $tableName);
+
+            $this->message($this->_('Created field mapping'));
 
             // Step 2: Create template and fields
             $templateCreator = $this->wire(new TemplateCreator());
