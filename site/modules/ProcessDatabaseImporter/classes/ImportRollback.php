@@ -112,13 +112,30 @@ class ImportRollback extends WireData {
         try {
             $containerTemplate = $this->wire('templates')->get('import-container');
             if ($containerTemplate && $containerTemplate->id) {
-                $numPages = $this->wire('pages')->count("template=$containerTemplate");
+                // Count pages using this template (exclude trash)
+                $numPages = $this->wire('pages')->count("template=$containerTemplate, include=all");
+
                 if ($numPages == 0) {
                     $fieldgroup = $containerTemplate->fieldgroup;
                     $this->wire('templates')->delete($containerTemplate);
                     $this->wire('fieldgroups')->delete($fieldgroup);
                     $result['templates_deleted']++;
+                    $result['errors'][] = "DEBUG: Successfully deleted import-container template";
+                } else {
+                    $result['errors'][] = "DEBUG: import-container still used by {$numPages} pages - not deleting";
+
+                    // DEBUG: Show which pages are still using it
+                    $pages = $this->wire('pages')->find("template=$containerTemplate, include=all, limit=5");
+                    $pagePaths = [];
+                    foreach ($pages as $p) {
+                        $pagePaths[] = $p->path . " (ID: {$p->id})";
+                    }
+                    if (!empty($pagePaths)) {
+                        $result['errors'][] = "DEBUG: Pages still using import-container: " . implode(', ', $pagePaths);
+                    }
                 }
+            } else {
+                $result['errors'][] = "DEBUG: import-container template not found";
             }
         } catch (\Exception $e) {
             $result['errors'][] = "Failed to delete import-container template: " . $e->getMessage();
