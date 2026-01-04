@@ -444,6 +444,11 @@ class SqlParser extends AbstractParser {
                         continue;
                     }
                 }
+
+                // Skip characters between rows (commas, spaces, newlines)
+                if ($depth === 0) {
+                    continue;
+                }
             }
 
             $current .= $char;
