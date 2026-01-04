@@ -325,27 +325,50 @@ class TypeDetector extends WireData {
             }
         }
 
-        // Very few unique values (<=5) - likely an options field
-        if ($uniqueCount <= 5) {
+        // Calculate uniqueness ratio to handle different sample sizes consistently
+        $uniqueRatio = $uniqueCount / $total;
+
+        // CRITICAL: Use RATIO instead of absolute count
+        // This ensures 5 rows and 100 rows are analyzed consistently
+
+        // Very low uniqueness (<=20%) with limited options = Options field
+        // Example: 100 rows, 10 unique (10%) = Options
+        // Example: 5 rows, 1 unique (20%) = Options
+        if ($uniqueRatio <= 0.20 && $uniqueCount <= 10) {
             return [
                 'is_options' => true,
                 'type' => 'options',
-                'confidence' => 90,
+                'confidence' => 95,
                 'fieldtype' => 'FieldtypeOptions',
-                'patterns' => ['low_cardinality'],
+                'patterns' => ['very_low_uniqueness'],
                 'options' => array_values($unique),
                 'options_count' => $uniqueCount
             ];
         }
 
-        // Medium cardinality (6-10) - check if values repeat enough
-        if ($uniqueCount <= 10 && $total / $uniqueCount >= 2) {
+        // Low uniqueness (<=30%) with very few unique values
+        // Example: 10 rows, 3 unique (30%) = Options
+        if ($uniqueRatio <= 0.30 && $uniqueCount <= 5) {
+            return [
+                'is_options' => true,
+                'type' => 'options',
+                'confidence' => 90,
+                'fieldtype' => 'FieldtypeOptions',
+                'patterns' => ['low_uniqueness'],
+                'options' => array_values($unique),
+                'options_count' => $uniqueCount
+            ];
+        }
+
+        // Absolute fallback: Only with enough data AND very few unique values
+        // Requires at least 20 rows to be confident
+        if ($total >= 20 && $uniqueCount <= 3) {
             return [
                 'is_options' => true,
                 'type' => 'options',
                 'confidence' => 85,
                 'fieldtype' => 'FieldtypeOptions',
-                'patterns' => ['options', 'repeated_values'],
+                'patterns' => ['very_low_cardinality'],
                 'options' => array_values($unique),
                 'options_count' => $uniqueCount
             ];
