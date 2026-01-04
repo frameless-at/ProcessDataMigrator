@@ -596,114 +596,45 @@ class ProcessDatabaseImporter extends Process implements Module {
 
         // Get session data
         $sessionData = $this->session->get(self::SESSION_KEY);
-        if (!$sessionData || !isset($sessionData['import_result'])) {
+        if (!$sessionData || !isset($sessionData['rollback_data'])) {
             $this->error($this->_('No import results found. Please start over.'));
             $this->session->redirect($this->page->url);
         }
 
-        $result = $sessionData['import_result'];
-        $mapping = $sessionData['mapping'];
-        $template = $sessionData['template'];
-        $parent = $sessionData['parent'];
+        $rollbackData = $sessionData['rollback_data'];
+        $totalImported = $sessionData['total_imported'] ?? 0;
 
         $out = '';
 
         // Success summary
-        if ($result['success']) {
-            $out .= '<div class="uk-alert uk-alert-success">';
-            $out .= '<h3>' . $this->_('Import Completed Successfully') . '</h3>';
-            $out .= '<p>' . sprintf(
-                $this->_('Successfully imported %d pages using template "%s"'),
-                $result['imported'],
-                $template
-            ) . '</p>';
-            $out .= '</div>';
-        } else {
-            $out .= '<div class="uk-alert uk-alert-danger">';
-            $out .= '<h3>' . $this->_('Import Failed') . '</h3>';
-            $out .= '<p>' . $this->_('No pages were imported.') . '</p>';
-            $out .= '</div>';
-        }
-
-        // Statistics
-        $out .= '<div class="table-analysis">';
-        $out .= '<h3>' . $this->_('Import Statistics') . '</h3>';
-        $out .= '<dl class="uk-description-list">';
-        $out .= '<dt>' . $this->_('Template') . '</dt>';
-        $out .= '<dd><code>' . $this->sanitizer->entities($template) . '</code></dd>';
-        $out .= '<dt>' . $this->_('Parent Page') . '</dt>';
-        $out .= '<dd>' . $this->sanitizer->entities($parent) . '</dd>';
-        $out .= '<dt>' . $this->_('Pages Created') . '</dt>';
-        $out .= '<dd><strong>' . $result['imported'] . '</strong></dd>';
-        $out .= '<dt>' . $this->_('Errors') . '</dt>';
-        $out .= '<dd>' . count($result['errors']) . '</dd>';
-        $out .= '</dl>';
+        $out .= '<div class="uk-alert uk-alert-success">';
+        $out .= '<h3>' . $this->_('Import Completed Successfully') . '</h3>';
+        $out .= '<p>' . sprintf(
+            $this->_('Successfully imported %d pages from %d tables'),
+            $totalImported,
+            count($rollbackData)
+        ) . '</p>';
         $out .= '</div>';
 
-        // Created pages
-        if (!empty($result['created_pages'])) {
-            $out .= '<div class="table-analysis uk-margin">';
-            $out .= '<h3>' . $this->_('Created Pages') . '</h3>';
-            $out .= '<table class="uk-table uk-table-striped uk-table-small">';
-            $out .= '<thead>';
-            $out .= '<tr>';
-            $out .= '<th>' . $this->_('ID') . '</th>';
-            $out .= '<th>' . $this->_('Title') . '</th>';
-            $out .= '<th>' . $this->_('Path') . '</th>';
-            $out .= '<th>' . $this->_('Actions') . '</th>';
-            $out .= '</tr>';
-            $out .= '</thead>';
-            $out .= '<tbody>';
-
-            foreach ($result['created_pages'] as $pageInfo) {
-                $out .= '<tr>';
-                $out .= '<td>' . $pageInfo['id'] . '</td>';
-                $out .= '<td>' . $this->sanitizer->entities($pageInfo['title']) . '</td>';
-                $out .= '<td><code>' . $this->sanitizer->entities($pageInfo['path']) . '</code></td>';
-                $out .= '<td>';
-                $out .= '<a href="' . $this->config->urls->admin . 'page/edit/?id=' . $pageInfo['id'] . '" target="_blank">';
-                $out .= '<i class="fa fa-edit"></i> ' . $this->_('Edit');
-                $out .= '</a>';
-                $out .= '</td>';
-                $out .= '</tr>';
-            }
-
-            $out .= '</tbody>';
-            $out .= '</table>';
-            $out .= '</div>';
-        }
-
-        // Errors
-        if (!empty($result['errors'])) {
-            $out .= '<div class="table-analysis uk-margin">';
-            $out .= '<h3>' . $this->_('Import Errors') . '</h3>';
-            $out .= '<table class="uk-table uk-table-striped uk-table-small">';
-            $out .= '<thead>';
-            $out .= '<tr>';
-            $out .= '<th>' . $this->_('Row') . '</th>';
-            $out .= '<th>' . $this->_('Error') . '</th>';
-            $out .= '</tr>';
-            $out .= '</thead>';
-            $out .= '<tbody>';
-
-            foreach ($result['errors'] as $error) {
-                $out .= '<tr>';
-                $out .= '<td>' . $error['row'] . '</td>';
-                $out .= '<td>' . $this->sanitizer->entities($error['error']) . '</td>';
-                $out .= '</tr>';
-            }
-
-            $out .= '</tbody>';
-            $out .= '</table>';
+        // Statistics for each table
+        foreach ($rollbackData as $tableData) {
+            $out .= '<div class="table-analysis uk-margin" style="border: 2px solid #ddd; padding: 15px; border-radius: 4px;">';
+            $out .= '<h3>' . $this->sanitizer->entities($tableData['table']) . '</h3>';
+            $out .= '<dl class="uk-description-list">';
+            $out .= '<dt>' . $this->_('Template') . '</dt>';
+            $out .= '<dd><code>' . $this->sanitizer->entities($tableData['template']) . '</code></dd>';
+            $out .= '<dt>' . $this->_('Parent Page') . '</dt>';
+            $out .= '<dd>' . $this->sanitizer->entities($tableData['parent_page']) . '</dd>';
+            $out .= '<dt>' . $this->_('Pages Created') . '</dt>';
+            $out .= '<dd><strong>' . count($tableData['created_pages']) . '</strong></dd>';
+            $out .= '<dt>' . $this->_('Fields Created') . '</dt>';
+            $out .= '<dd>' . count($tableData['created_fields']) . '</dd>';
+            $out .= '</dl>';
             $out .= '</div>';
         }
 
         // Actions
         $out .= '<div class="uk-margin">';
-        $out .= '<a href="' . $parent . '" class="ui-button ui-priority-primary" target="_blank">';
-        $out .= '<i class="fa fa-folder-open"></i> ' . $this->_('View Imported Pages');
-        $out .= '</a>';
-        $out .= ' &nbsp; ';
 
         // Rollback button (if rollback data available)
         if (isset($sessionData['rollback_data'])) {
