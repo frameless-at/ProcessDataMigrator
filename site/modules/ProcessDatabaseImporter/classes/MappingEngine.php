@@ -43,7 +43,7 @@ class MappingEngine extends WireData {
             // Create field mapping
             $fieldMapping = [
                 'source_column' => $columnName,
-                'target_field' => $this->sanitizeFieldName($columnName),
+                'target_field' => $this->sanitizeFieldName($columnName, $mapping['template']),
                 'fieldtype' => $column['suggested_fieldtype'],
                 'label' => $this->generateLabel($columnName),
                 'required' => !$column['nullable'],
@@ -72,8 +72,9 @@ class MappingEngine extends WireData {
 
     /**
      * Sanitize column name to valid ProcessWire field name
+     * IMPORTANT: Fields are prefixed with template name to ensure uniqueness across tables
      */
-    protected function sanitizeFieldName($name) {
+    protected function sanitizeFieldName($name, $templateName) {
         // Convert to lowercase
         $name = strtolower($name);
 
@@ -104,6 +105,11 @@ class MappingEngine extends WireData {
         if (preg_match('/^\d/', $name)) {
             $name = 'field_' . $name;
         }
+
+        // CRITICAL: Prefix with template name to make fields unique per table
+        // This prevents conflicts when multiple tables have same column names
+        // e.g., orders.status and customers.status become orders_status and customers_status
+        $name = $templateName . '_' . $name;
 
         return $name;
     }
