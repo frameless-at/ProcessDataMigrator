@@ -42,21 +42,33 @@ class ImportRollback extends WireData {
             try {
                 $parent = $this->wire('pages')->get($rollbackData['parent_page']);
 
-                // Delete parent if empty
-                if ($parent->id && $parent->numChildren() == 0) {
-                    $this->wire('pages')->delete($parent, true);
-                    $result['pages_deleted']++;
+                if ($parent && $parent->id) {
+                    // CRITICAL: Use actual count, not cached numChildren()
+                    $actualChildCount = $this->wire('pages')->count("parent={$parent->id}");
 
-                    // Walk up and delete empty container parents
-                    $currentParent = $parent->parent;
-                    while ($currentParent->id && $currentParent->id != 1 && $currentParent->template->name === 'import-container') {
-                        if ($currentParent->numChildren() == 0) {
-                            $nextParent = $currentParent->parent;
-                            $this->wire('pages')->delete($currentParent, true);
-                            $result['pages_deleted']++;
-                            $currentParent = $nextParent;
-                        } else {
-                            break;
+                    // Delete parent if empty
+                    if ($actualChildCount == 0) {
+                        $this->wire('pages')->delete($parent, true);
+                        $result['pages_deleted']++;
+
+                        // Walk up and delete empty container parents
+                        $currentParent = $parent->parent;
+                        while ($currentParent && $currentParent->id && $currentParent->id != 1) {
+                            if ($currentParent->template->name === 'import-container') {
+                                // CRITICAL: Use actual count, not cached
+                                $containerChildCount = $this->wire('pages')->count("parent={$currentParent->id}");
+
+                                if ($containerChildCount == 0) {
+                                    $nextParent = $currentParent->parent;
+                                    $this->wire('pages')->delete($currentParent, true);
+                                    $result['pages_deleted']++;
+                                    $currentParent = $nextParent;
+                                } else {
+                                    break;
+                                }
+                            } else {
+                                break;
+                            }
                         }
                     }
                 }
@@ -112,30 +124,13 @@ class ImportRollback extends WireData {
         try {
             $containerTemplate = $this->wire('templates')->get('import-container');
             if ($containerTemplate && $containerTemplate->id) {
-                // Count pages using this template (exclude trash)
-                $numPages = $this->wire('pages')->count("template=$containerTemplate, include=all");
-
+                $numPages = $this->wire('pages')->count("template=$containerTemplate");
                 if ($numPages == 0) {
                     $fieldgroup = $containerTemplate->fieldgroup;
                     $this->wire('templates')->delete($containerTemplate);
                     $this->wire('fieldgroups')->delete($fieldgroup);
                     $result['templates_deleted']++;
-                    $result['errors'][] = "DEBUG: Successfully deleted import-container template";
-                } else {
-                    $result['errors'][] = "DEBUG: import-container still used by {$numPages} pages - not deleting";
-
-                    // DEBUG: Show which pages are still using it
-                    $pages = $this->wire('pages')->find("template=$containerTemplate, include=all, limit=5");
-                    $pagePaths = [];
-                    foreach ($pages as $p) {
-                        $pagePaths[] = $p->path . " (ID: {$p->id})";
-                    }
-                    if (!empty($pagePaths)) {
-                        $result['errors'][] = "DEBUG: Pages still using import-container: " . implode(', ', $pagePaths);
-                    }
                 }
-            } else {
-                $result['errors'][] = "DEBUG: import-container template not found";
             }
         } catch (\Exception $e) {
             $result['errors'][] = "Failed to delete import-container template: " . $e->getMessage();
