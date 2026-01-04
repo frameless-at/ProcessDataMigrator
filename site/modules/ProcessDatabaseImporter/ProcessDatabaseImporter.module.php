@@ -517,21 +517,6 @@ class ProcessDatabaseImporter extends Process implements Module {
         $tableName = array_key_first($allAnalysis);
         $analysis = $allAnalysis[$tableName] ?? [];
 
-        // DEBUG: Show analysis column names and which have options
-        if (isset($analysis['columns'])) {
-            $optionColumns = [];
-            foreach ($analysis['columns'] as $colName => $colData) {
-                if (isset($colData['options'])) {
-                    $optionColumns[] = $colName . '(' . count($colData['options']) . ')';
-                }
-            }
-            if (!empty($optionColumns)) {
-                $this->wire()->message("DEBUG processMappingForm: Columns with options in analysis: " . implode(', ', $optionColumns));
-            } else {
-                $this->wire()->warning("DEBUG processMappingForm: NO columns have options in analysis!");
-            }
-        }
-
         $mapping = [
             'template' => $this->input->post('template', 'pageName'),
             'parent' => $this->input->post('parent', 'text'),
@@ -565,7 +550,7 @@ class ProcessDatabaseImporter extends Process implements Module {
                     $mapping['fields'][$sourceColumn]['options'] = $analysis['columns'][$sourceColumn]['options'];
                     $this->wire()->message("DEBUG: Preserved " . count($analysis['columns'][$sourceColumn]['options']) . " options for field {$sourceColumn}");
                 } else {
-                    $this->wire()->warning("DEBUG: Looking for options at analysis['columns']['{$sourceColumn}']['options'] - NOT FOUND!");
+                    $this->wire()->warning("DEBUG: No options found in analysis for field {$sourceColumn}");
                 }
             }
 
