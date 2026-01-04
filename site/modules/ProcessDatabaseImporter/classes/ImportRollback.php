@@ -22,14 +22,27 @@ class ImportRollback extends WireData {
             'errors' => []
         ];
 
+        // DEBUG: Show what we're trying to delete
+        if (isset($rollbackData['created_pages'])) {
+            $result['errors'][] = "DEBUG: Found " . count($rollbackData['created_pages']) . " pages to delete";
+        }
+
         // Delete pages first (must be before templates)
         if (isset($rollbackData['created_pages'])) {
             foreach ($rollbackData['created_pages'] as $pageInfo) {
                 try {
-                    $page = $this->wire('pages')->get($pageInfo['id']);
-                    if ($page->id) {
-                        $this->wire('pages')->delete($page, true); // recursive
+                    $pageId = (int)$pageInfo['id'];
+                    $page = $this->wire('pages')->get($pageId);
+
+                    $result['errors'][] = "DEBUG: Trying to delete page ID {$pageId}, found: " . ($page && $page->id ? "YES (ID: {$page->id}, path: {$page->path})" : "NO");
+
+                    if ($page && $page->id) {
+                        // Force delete (bypassing trash)
+                        $this->wire('pages')->delete($page, true); // recursive = true
                         $result['pages_deleted']++;
+                        $result['errors'][] = "DEBUG: Successfully deleted page {$pageId}";
+                    } else {
+                        $result['errors'][] = "Page {$pageId} not found or already deleted";
                     }
                 } catch (\Exception $e) {
                     $result['errors'][] = "Failed to delete page {$pageInfo['id']}: " . $e->getMessage();
@@ -70,19 +83,25 @@ class ImportRollback extends WireData {
             try {
                 $template = $this->wire('templates')->get($rollbackData['template']);
                 if ($template && $template->id) {
-                    // Remove all fields from fieldgroup first
-                    foreach ($template->fieldgroup as $field) {
-                        if ($field->name !== 'title') { // Keep title
-                            $template->fieldgroup->remove($field);
+                    // Check if template is still in use
+                    $numPages = $this->wire('pages')->count("template=$template, include=all");
+                    if ($numPages > 0) {
+                        $result['errors'][] = "Cannot delete template '{$template->name}': still used by {$numPages} pages (check if pages were deleted correctly)";
+                    } else {
+                        // Remove all fields from fieldgroup first
+                        foreach ($template->fieldgroup as $field) {
+                            if ($field->name !== 'title') { // Keep title
+                                $template->fieldgroup->remove($field);
+                            }
                         }
-                    }
-                    $template->fieldgroup->save();
+                        $template->fieldgroup->save();
 
-                    // Delete template and fieldgroup
-                    $fieldgroup = $template->fieldgroup;
-                    $this->wire('templates')->delete($template);
-                    $this->wire('fieldgroups')->delete($fieldgroup);
-                    $result['templates_deleted']++;
+                        // Delete template and fieldgroup
+                        $fieldgroup = $template->fieldgroup;
+                        $this->wire('templates')->delete($template);
+                        $this->wire('fieldgroups')->delete($fieldgroup);
+                        $result['templates_deleted']++;
+                    }
                 }
             } catch (\Exception $e) {
                 $result['errors'][] = "Failed to delete template: " . $e->getMessage();

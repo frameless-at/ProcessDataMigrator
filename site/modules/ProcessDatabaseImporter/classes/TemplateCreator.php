@@ -101,8 +101,13 @@ class TemplateCreator extends WireData {
             $field->save();
 
             // Type-specific configuration AFTER initial save
-            if ($fieldtype === 'FieldtypeOptions' && isset($fieldMapping['options'])) {
-                $this->configureOptionsField($field, $fieldMapping['options']);
+            if ($fieldtype === 'FieldtypeOptions') {
+                if (isset($fieldMapping['options'])) {
+                    $this->wire()->message("DEBUG: Configuring options for field {$fieldName}, found " . count($fieldMapping['options']) . " options");
+                    $this->configureOptionsField($field, $fieldMapping['options']);
+                } else {
+                    $this->wire()->warning("DEBUG: FieldtypeOptions field {$fieldName} has NO options in mapping!");
+                }
             }
 
             if ($fieldtype === 'FieldtypePage' && isset($fieldMapping['reference_table'])) {
