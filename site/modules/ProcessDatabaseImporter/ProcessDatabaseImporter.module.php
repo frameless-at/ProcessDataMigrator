@@ -197,9 +197,6 @@ class ProcessDatabaseImporter extends Process implements Module {
 
         $out = $this->buildAnalysisView($analysis);
 
-        // Add buttons
-        $out .= $this->buildAnalysisActions();
-
         return $out;
     }
 
@@ -348,6 +345,9 @@ class ProcessDatabaseImporter extends Process implements Module {
         foreach ($analysis as $tableName => $tableAnalysis) {
             $out .= $this->buildTableAnalysis($tableName, $tableAnalysis);
         }
+
+        // Add action buttons inside the form
+        $out .= $this->buildAnalysisActions();
 
         $out .= '</div>';
         $out .= '</form>';
