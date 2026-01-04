@@ -92,6 +92,7 @@ class MappingEngine extends WireData {
             'templates', 'children', 'child', 'created', 'modified', 'createdUser',
             'modifiedUser', 'sort', 'sortfield', 'numChildren', 'num_children',
             'url', 'path', 'httpUrl', 'httpurl', 'status', 'references', 'rootParent',
+            'description', // Page description meta field
         ];
 
         // If field name is reserved, prefix with "field_"
