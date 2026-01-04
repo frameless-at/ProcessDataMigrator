@@ -108,45 +108,27 @@ class TemplateCreator extends WireData {
      */
     protected function configureOptionsField($field, $options) {
         if (!$field->type instanceof FieldtypeOptions) {
-            $this->wire()->error("Field {$field->name} is not a FieldtypeOptions field");
             return;
         }
-
-        // DEBUG
-        $this->wire()->message("DEBUG: Field ID = {$field->id}, Name = {$field->name}");
-        $this->wire()->message("DEBUG: Options to add: " . implode(', ', $options));
 
         // Get the fieldtype module
         $fieldtype = $this->wire('modules')->get('FieldtypeOptions');
         if (!$fieldtype) {
-            $this->wire()->error("Could not load FieldtypeOptions module");
             return;
         }
 
         // Build options string (one option per line)
         $optionsString = implode("\n", $options);
-        $this->wire()->message("DEBUG: Options string: " . $optionsString);
 
         // Use the fieldtype's manager to set options
-        try {
-            $result = $fieldtype->manager->setOptionsString($field, $optionsString, true);
+        $result = $fieldtype->manager->setOptionsString($field, $optionsString, true);
 
-            $this->wire()->message("DEBUG: setOptionsString result: " . print_r($result, true));
-
-            // Verify options were added
-            $savedOptions = $fieldtype->getOptions($field);
-            $this->wire()->message("DEBUG: Options count after save: " . $savedOptions->count());
-
+        if ($result['added'] > 0) {
             $this->wire()->message(sprintf(
-                "Configured options field '%s': %d added, %d updated, %d deleted",
-                $field->name,
+                "Added %d options to field '%s'",
                 $result['added'],
-                $result['updated'],
-                $result['deleted']
+                $field->name
             ));
-        } catch (\Exception $e) {
-            $this->wire()->error("Failed to set options for field {$field->name}: " . $e->getMessage());
-            $this->wire()->error("DEBUG: Exception trace: " . $e->getTraceAsString());
         }
     }
 
