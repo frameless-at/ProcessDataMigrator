@@ -43,7 +43,8 @@ class DataAnalyzer extends WireData {
             $columnAnalysis = $this->analyzeColumn(
                 $columnName,
                 $columnInfo,
-                $data
+                $data,
+                $analysis['primary_key']
             );
 
             $analysis['columns'][$columnName] = $columnAnalysis;
@@ -60,7 +61,7 @@ class DataAnalyzer extends WireData {
     /**
      * Analyze a single column
      */
-    protected function analyzeColumn($columnName, $columnInfo, $data) {
+    protected function analyzeColumn($columnName, $columnInfo, $data, $primaryKey = null) {
         // Extract sample values for this column
         $values = [];
         foreach ($data as $row) {
@@ -134,7 +135,7 @@ class DataAnalyzer extends WireData {
 
         // Special flags
         $analysis['is_likely_id'] = $this->isLikelyId($columnName, $columnInfo);
-        $analysis['is_likely_foreign_key'] = $this->isLikelyForeignKey($columnName, $columnInfo);
+        $analysis['is_likely_foreign_key'] = $this->isLikelyForeignKey($columnName, $columnInfo, $primaryKey);
         $analysis['is_likely_title'] = $this->isLikelyTitle($columnName, $analysis);
         $analysis['is_likely_name'] = $this->isLikelyName($columnName, $analysis);
 
@@ -153,14 +154,53 @@ class DataAnalyzer extends WireData {
 
     /**
      * Check if column is likely a foreign key
+     *
+     * @param string $columnName Column name
+     * @param array $columnInfo Column metadata
+     * @param string|null $primaryKey Primary key column name
+     * @return bool True if likely a foreign key
      */
-    protected function isLikelyForeignKey($columnName, $columnInfo) {
+    protected function isLikelyForeignKey($columnName, $columnInfo, $primaryKey = null) {
         $name = strtolower($columnName);
-        return (
-            substr($name, -3) === '_id' ||
-            substr($name, 0, 3) === 'id_' ||
-            in_array($columnInfo['base_type'] ?? '', ['integer'])
-        ) && $name !== 'id';
+
+        // Skip if this is the primary key
+        if ($primaryKey && strtolower($primaryKey) === $name) {
+            return false;
+        }
+
+        // Skip if auto_increment (definitely a primary key)
+        if ($columnInfo['auto_increment'] ?? false) {
+            return false;
+        }
+
+        // Must be integer type for FK
+        if (!in_array($columnInfo['base_type'] ?? '', ['integer'])) {
+            return false;
+        }
+
+        // Pattern-based detection:
+        // 1. Ends with _id (e.g., user_id, customer_id)
+        if (substr($name, -3) === '_id') {
+            return true;
+        }
+
+        // 2. Starts with id_ (e.g., id_user)
+        if (substr($name, 0, 3) === 'id_') {
+            return true;
+        }
+
+        // 3. Exactly "id" but NOT the primary key (e.g., in join tables)
+        // This handles cases like: product_images table with "id" referencing products.id
+        if ($name === 'id') {
+            return true;
+        }
+
+        // 4. Ends with ID (uppercase, e.g., customerID, userID)
+        if (substr($columnName, -2) === 'ID') {
+            return true;
+        }
+
+        return false;
     }
 
     /**
@@ -307,6 +347,7 @@ class DataAnalyzer extends WireData {
                     'target_column' => $fk['column'],
                     'type' => 'foreign_key',
                     'cardinality' => 'many_to_one',
+                    'confidence' => 100,
                 ];
             }
 
@@ -333,10 +374,145 @@ class DataAnalyzer extends WireData {
                                     'target_column' => 'id',
                                     'type' => 'implicit_foreign_key',
                                     'cardinality' => 'many_to_one',
+                                    'confidence' => 80,
                                 ];
                                 break;
                             }
                         }
+                    }
+                }
+            }
+        }
+
+        // Add value-based FK detection
+        $valueBased = $this->detectForeignKeysByValue($tables);
+        foreach ($valueBased as $relation) {
+            // Only add if not already detected by other methods
+            $exists = false;
+            foreach ($relationships as $existing) {
+                if ($existing['source_table'] === $relation['source_table'] &&
+                    $existing['source_column'] === $relation['source_column'] &&
+                    $existing['target_table'] === $relation['target_table']) {
+                    $exists = true;
+                    break;
+                }
+            }
+
+            if (!$exists) {
+                $relationships[] = $relation;
+            }
+        }
+
+        return $relationships;
+    }
+
+    /**
+     * Detect foreign keys by comparing actual values between tables
+     *
+     * @param array $tables All parsed tables
+     * @return array Detected relationships
+     */
+    protected function detectForeignKeysByValue($tables) {
+        $relationships = [];
+
+        foreach ($tables as $sourceTableName => $sourceTable) {
+            $sourceStructure = $sourceTable['structure'] ?? [];
+            $sourceData = $sourceTable['data'] ?? [];
+            $sourcePrimaryKey = $sourceTable['primary_key'] ?? null;
+
+            // Skip if no data
+            if (empty($sourceData)) {
+                continue;
+            }
+
+            // Check each integer column in source table
+            foreach ($sourceStructure as $columnName => $columnInfo) {
+                // Skip if not integer type
+                if (!in_array($columnInfo['base_type'] ?? '', ['integer'])) {
+                    continue;
+                }
+
+                // Skip if this is the primary key
+                if ($sourcePrimaryKey && $columnName === $sourcePrimaryKey) {
+                    continue;
+                }
+
+                // Skip if auto_increment
+                if ($columnInfo['auto_increment'] ?? false) {
+                    continue;
+                }
+
+                // Extract unique values from this column
+                $sourceValues = [];
+                foreach ($sourceData as $row) {
+                    $value = $row[$columnName] ?? null;
+                    if ($value !== null && $value !== '' && is_numeric($value)) {
+                        $sourceValues[] = (int)$value;
+                    }
+                }
+
+                if (empty($sourceValues)) {
+                    continue;
+                }
+
+                $uniqueSourceValues = array_unique($sourceValues);
+                $totalSourceValues = count($sourceValues);
+
+                // Compare against all other tables
+                foreach ($tables as $targetTableName => $targetTable) {
+                    // Skip self-references for now (can be enhanced later)
+                    if ($sourceTableName === $targetTableName) {
+                        continue;
+                    }
+
+                    $targetPrimaryKey = $targetTable['primary_key'] ?? null;
+                    $targetData = $targetTable['data'] ?? [];
+
+                    // Skip if no primary key or no data
+                    if (!$targetPrimaryKey || empty($targetData)) {
+                        continue;
+                    }
+
+                    // Extract primary key values from target table
+                    $targetPkValues = [];
+                    foreach ($targetData as $row) {
+                        $value = $row[$targetPrimaryKey] ?? null;
+                        if ($value !== null && $value !== '' && is_numeric($value)) {
+                            $targetPkValues[] = (int)$value;
+                        }
+                    }
+
+                    if (empty($targetPkValues)) {
+                        continue;
+                    }
+
+                    // Calculate match percentage
+                    $matchCount = 0;
+                    foreach ($uniqueSourceValues as $sourceValue) {
+                        if (in_array($sourceValue, $targetPkValues)) {
+                            $matchCount++;
+                        }
+                    }
+
+                    $matchPercentage = (count($uniqueSourceValues) > 0)
+                        ? ($matchCount / count($uniqueSourceValues)) * 100
+                        : 0;
+
+                    // If >50% of values match, consider it a foreign key
+                    if ($matchPercentage >= 50) {
+                        $confidence = round($matchPercentage);
+
+                        $relationships[] = [
+                            'source_table' => $sourceTableName,
+                            'source_column' => $columnName,
+                            'target_table' => $targetTableName,
+                            'target_column' => $targetPrimaryKey,
+                            'type' => 'value_based_foreign_key',
+                            'cardinality' => 'many_to_one',
+                            'confidence' => $confidence,
+                            'matched_values' => $matchCount,
+                            'total_unique_values' => count($uniqueSourceValues),
+                        ];
                     }
                 }
             }
