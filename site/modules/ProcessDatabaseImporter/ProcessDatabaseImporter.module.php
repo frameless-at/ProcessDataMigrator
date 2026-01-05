@@ -86,20 +86,21 @@ class ProcessDatabaseImporter extends Process implements Module {
                 return $this->executeClear();
             }
             if ($action === 'import') {
-                // Store selected tables and fields if submitted via POST
+                $sessionData = $this->session->get(self::SESSION_KEY);
+
+                // Store selected tables if submitted via POST
                 if ($this->input->post('selected_tables')) {
                     $selectedTables = $this->input->post->array('selected_tables');
-                    $sessionData = $this->session->get(self::SESSION_KEY);
                     $sessionData['selected_tables'] = $selectedTables;
-
-                    // Store selected fields per table
-                    $selectedFields = $this->input->post('fields');
-                    if ($selectedFields && is_array($selectedFields)) {
-                        $sessionData['selected_fields'] = $selectedFields;
-                    }
-
-                    $this->session->set(self::SESSION_KEY, $sessionData);
                 }
+
+                // Store selected fields if submitted via POST (independent of selected_tables!)
+                $selectedFields = $this->input->post('fields');
+                if ($selectedFields && is_array($selectedFields)) {
+                    $sessionData['selected_fields'] = $selectedFields;
+                }
+
+                $this->session->set(self::SESSION_KEY, $sessionData);
                 return $this->executeImport();
             }
             if ($action === 'rollback') {
