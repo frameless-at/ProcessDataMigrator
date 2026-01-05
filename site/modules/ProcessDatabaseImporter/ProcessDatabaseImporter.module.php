@@ -423,12 +423,11 @@ class ProcessDatabaseImporter extends Process implements Module {
 
             $out .= '<tr>';
             $out .= '<td>';
-            // CRITICAL: Don't use sanitizer->entities() in name attribute! It breaks POST data!
-            // Column names are already safe (from SQL parser), only sanitize for display
-            $out .= '<input type="checkbox" name="fields[' . $tableName . '][' . $columnName . ']" value="1"' . $checked . $disabled . '>';
+            // Use consistent format like table checkboxes: name="fields[table][]" value="fieldname"
+            $out .= '<input type="checkbox" name="fields[' . $tableName . '][]" value="' . $columnName . '"' . $checked . $disabled . '>';
             // If disabled (title field), add hidden input to ensure it's included in POST
             if ($disabled) {
-                $out .= '<input type="hidden" name="fields[' . $tableName . '][' . $columnName . ']" value="1">';
+                $out .= '<input type="hidden" name="fields[' . $tableName . '][]" value="' . $columnName . '">';
             }
             $out .= '</td>';
             $out .= '<td><strong>' . $this->sanitizer->entities($columnName) . '</strong>';
@@ -568,8 +567,8 @@ class ProcessDatabaseImporter extends Process implements Module {
                     $selectedFields = $sessionData['selected_fields'][$tableName] ?? [];
                     $filteredFields = [];
                     foreach ($mapping['fields'] as $columnName => $fieldMapping) {
-                        // Include field if it's selected OR if it's the title field (always required)
-                        if (isset($selectedFields[$columnName]) || $columnName === $mapping['title_field']) {
+                        // Include field if it's in selected array OR if it's the title field (always required)
+                        if (in_array($columnName, $selectedFields) || $columnName === $mapping['title_field']) {
                             $filteredFields[$columnName] = $fieldMapping;
                         }
                     }
