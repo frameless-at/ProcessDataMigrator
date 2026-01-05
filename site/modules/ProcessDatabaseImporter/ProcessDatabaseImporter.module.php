@@ -423,10 +423,12 @@ class ProcessDatabaseImporter extends Process implements Module {
 
             $out .= '<tr>';
             $out .= '<td>';
-            $out .= '<input type="checkbox" name="fields[' . $tableName . '][' . $this->sanitizer->entities($columnName) . ']" value="1"' . $checked . $disabled . '>';
+            // CRITICAL: Don't use sanitizer->entities() in name attribute! It breaks POST data!
+            // Column names are already safe (from SQL parser), only sanitize for display
+            $out .= '<input type="checkbox" name="fields[' . $tableName . '][' . $columnName . ']" value="1"' . $checked . $disabled . '>';
             // If disabled (title field), add hidden input to ensure it's included in POST
             if ($disabled) {
-                $out .= '<input type="hidden" name="fields[' . $tableName . '][' . $this->sanitizer->entities($columnName) . ']" value="1">';
+                $out .= '<input type="hidden" name="fields[' . $tableName . '][' . $columnName . ']" value="1">';
             }
             $out .= '</td>';
             $out .= '<td><strong>' . $this->sanitizer->entities($columnName) . '</strong>';
