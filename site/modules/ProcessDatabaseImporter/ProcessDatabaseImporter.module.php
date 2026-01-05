@@ -560,18 +560,19 @@ class ProcessDatabaseImporter extends Process implements Module {
                 $mappingEngine = $this->wire(new MappingEngine());
                 $mapping = $mappingEngine->createMapping($analysis, $tableName);
 
-                // Filter mapping to only include selected fields
-                $selectedFields = $sessionData['selected_fields'][$tableName] ?? [];
-                if (!empty($selectedFields)) {
+                // Filter mapping to only include selected fields (if field selection was used)
+                if (isset($sessionData['selected_fields'])) {
+                    $selectedFields = $sessionData['selected_fields'][$tableName] ?? [];
                     $filteredFields = [];
                     foreach ($mapping['fields'] as $columnName => $fieldMapping) {
-                        // Include field if it's selected OR if it's the title field
+                        // Include field if it's selected OR if it's the title field (always required)
                         if (isset($selectedFields[$columnName]) || $columnName === $mapping['title_field']) {
                             $filteredFields[$columnName] = $fieldMapping;
                         }
                     }
                     $mapping['fields'] = $filteredFields;
-                    $this->message($this->_("Filtered to {count} selected fields for table {$tableName}", ['count' => count($filteredFields)]));
+                    $fieldCount = count($filteredFields);
+                    $this->message($this->_("Filtered to $fieldCount selected field(s) for table {$tableName}"));
                 }
 
                 // Step 2: Create template and fields
