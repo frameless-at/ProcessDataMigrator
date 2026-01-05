@@ -178,29 +178,19 @@ class DataAnalyzer extends WireData {
             return false;
         }
 
-        // Pattern-based detection:
-        // 1. Ends with _id (e.g., user_id, customer_id)
-        if (substr($name, -3) === '_id') {
-            return true;
-        }
+        // At this point: It's an integer field that is NOT the primary key
+        // Consider it a potential foreign key
+        //
+        // This handles ALL cases:
+        // 1. Traditional naming: user_id, customer_id, id_user
+        // 2. Without suffix: customer, user, parent, author
+        // 3. Exact "id" (in join tables or references)
+        // 4. CamelCase: customerID, userID
+        //
+        // The value-based FK detection will determine the actual relationships
+        // with confidence scores
 
-        // 2. Starts with id_ (e.g., id_user)
-        if (substr($name, 0, 3) === 'id_') {
-            return true;
-        }
-
-        // 3. Exactly "id" but NOT the primary key (e.g., in join tables)
-        // This handles cases like: product_images table with "id" referencing products.id
-        if ($name === 'id') {
-            return true;
-        }
-
-        // 4. Ends with ID (uppercase, e.g., customerID, userID)
-        if (substr($columnName, -2) === 'ID') {
-            return true;
-        }
-
-        return false;
+        return true;
     }
 
     /**
