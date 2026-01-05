@@ -106,10 +106,14 @@ class MappingEngine extends WireData {
             $name = 'field_' . $name;
         }
 
+        // CRITICAL: Sanitize template name to remove hyphens (ProcessWire field names can't have hyphens)
+        // Template names use hyphens, but field names must use underscores only
+        $templatePrefix = str_replace('-', '_', $templateName);
+
         // CRITICAL: Prefix with template name to make fields unique per table
         // This prevents conflicts when multiple tables have same column names
         // e.g., orders.status and customers.status become orders_status and customers_status
-        $name = $templateName . '_' . $name;
+        $name = $templatePrefix . '_' . $name;
 
         return $name;
     }
