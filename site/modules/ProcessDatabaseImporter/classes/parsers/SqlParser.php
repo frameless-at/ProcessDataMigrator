@@ -139,6 +139,11 @@ class SqlParser extends AbstractParser {
                     $inCreateStatement = false;
                     if ($currentTable) {
                         $this->parseCreateTable($currentTable, $currentCreateStatement);
+
+                        // FALLBACK: If no primary key was found, try to guess it
+                        if (!isset($this->tables[$currentTable]['primary_key'])) {
+                            $this->guessPrimaryKey($currentTable);
+                        }
                     }
                     $currentCreateStatement = '';
                 }
@@ -289,6 +294,82 @@ class SqlParser extends AbstractParser {
 
                 $this->tables[$tableName]['structure'][$columnName] = $columnDef;
             }
+        }
+    }
+
+    /**
+     * Guess primary key when none is explicitly defined
+     * Uses naming conventions and field properties
+     */
+    protected function guessPrimaryKey($tableName) {
+        if (!isset($this->tables[$tableName]['structure'])) {
+            return;
+        }
+
+        $structure = $this->tables[$tableName]['structure'];
+        $candidates = [];
+
+        foreach ($structure as $columnName => $columnInfo) {
+            $name = strtolower($columnName);
+            $score = 0;
+
+            // Must be integer type
+            if (($columnInfo['base_type'] ?? '') !== 'integer') {
+                continue;
+            }
+
+            // Strong indicators (high score)
+            if ($name === 'id') {
+                $score += 100;
+            } elseif (preg_match('/^(.+)_id$/', $name, $matches)) {
+                // table_id pattern
+                $score += 80;
+            } elseif (preg_match('/^id_(.+)$/', $name)) {
+                // id_table pattern
+                $score += 70;
+            } elseif (substr($name, -2) === 'id') {
+                // ends with id (e.g., comid, userid)
+                $score += 50;
+            }
+
+            // Prefer NOT NULL fields
+            if (!($columnInfo['nullable'] ?? true)) {
+                $score += 10;
+            }
+
+            // AUTO_INCREMENT is a strong indicator (but we already handle this elsewhere)
+            if ($columnInfo['auto_increment'] ?? false) {
+                $score += 200;
+            }
+
+            if ($score > 0) {
+                $candidates[] = [
+                    'name' => $columnName,
+                    'score' => $score
+                ];
+            }
+        }
+
+        if (!empty($candidates)) {
+            // Sort by score (highest first)
+            usort($candidates, function($a, $b) {
+                return $b['score'] <=> $a['score'];
+            });
+
+            // Use the highest scoring candidate
+            $this->tables[$tableName]['primary_key'] = $candidates[0]['name'];
+            wire()->log->save('sql-parser', "Guessed primary key for $tableName: {$candidates[0]['name']} (score: {$candidates[0]['score']})");
+        } else {
+            // Last resort: use first integer NOT NULL field
+            foreach ($structure as $columnName => $columnInfo) {
+                if (($columnInfo['base_type'] ?? '') === 'integer' && !($columnInfo['nullable'] ?? true)) {
+                    $this->tables[$tableName]['primary_key'] = $columnName;
+                    wire()->log->save('sql-parser', "Fallback: Using first integer NOT NULL field as PK for $tableName: $columnName");
+                    return;
+                }
+            }
+
+            wire()->log->save('sql-parser', "WARNING: Could not guess primary key for $tableName");
         }
     }
 
