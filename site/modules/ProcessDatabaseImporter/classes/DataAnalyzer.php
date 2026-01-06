@@ -35,6 +35,12 @@ class DataAnalyzer extends WireData {
             'suggested_parent' => '/',
         ];
 
+        // DEBUG: Log table analysis start
+        $this->wire()->log->save('fk-detection', "\n\n========================================");
+        $this->wire()->log->save('fk-detection', "ANALYZING TABLE: {$analysis['table_name']}");
+        $this->wire()->log->save('fk-detection', "Primary Key: " . ($analysis['primary_key'] ?? 'NULL'));
+        $this->wire()->log->save('fk-detection', "========================================");
+
         // Analyze each column
         $structure = $tableData['structure'] ?? [];
         $data = array_slice($tableData['data'] ?? [], 0, $sampleSize);
@@ -176,10 +182,12 @@ class DataAnalyzer extends WireData {
         $name = strtolower($columnName);
 
         // DEBUG logging
-        $this->wire()->log->save('fk-detection', "Checking column: $columnName");
-        $this->wire()->log->save('fk-detection', "  Primary Key: " . ($primaryKey ?? 'NULL'));
+        $this->wire()->log->save('fk-detection', "\nChecking column: $columnName");
+        $this->wire()->log->save('fk-detection', "  Primary Key for table: " . ($primaryKey ?? 'NULL'));
         $this->wire()->log->save('fk-detection', "  base_type: " . ($columnInfo['base_type'] ?? 'NULL'));
+        $this->wire()->log->save('fk-detection', "  type: " . ($columnInfo['type'] ?? 'NULL'));
         $this->wire()->log->save('fk-detection', "  auto_increment: " . (($columnInfo['auto_increment'] ?? false) ? 'true' : 'false'));
+        $this->wire()->log->save('fk-detection', "  nullable: " . (($columnInfo['nullable'] ?? true) ? 'true' : 'false'));
 
         // Skip if this is the primary key
         if ($primaryKey && strtolower($primaryKey) === $name) {

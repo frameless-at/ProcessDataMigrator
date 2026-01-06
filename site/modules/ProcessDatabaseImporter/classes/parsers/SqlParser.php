@@ -358,7 +358,10 @@ class SqlParser extends AbstractParser {
 
             // Use the highest scoring candidate
             $this->tables[$tableName]['primary_key'] = $candidates[0]['name'];
-            wire()->log->save('sql-parser', "Guessed primary key for $tableName: {$candidates[0]['name']} (score: {$candidates[0]['score']})");
+            wire()->log->save('sql-parser', "\n=== PRIMARY KEY GUESSING ===");
+            wire()->log->save('sql-parser', "Table: $tableName");
+            wire()->log->save('sql-parser', "Guessed PK: {$candidates[0]['name']} (score: {$candidates[0]['score']})");
+            wire()->log->save('sql-parser', "All candidates: " . json_encode($candidates));
         } else {
             // Last resort: use first integer NOT NULL field
             foreach ($structure as $columnName => $columnInfo) {
