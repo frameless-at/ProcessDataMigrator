@@ -134,7 +134,13 @@ class DataAnalyzer extends WireData {
         }
 
         // Special flags
-        $analysis['is_likely_id'] = $this->isLikelyId($columnName, $columnInfo);
+        // Mark if this column is the primary key
+        $columnInfoWithPK = $columnInfo;
+        if ($primaryKey && strtolower($columnName) === strtolower($primaryKey)) {
+            $columnInfoWithPK['is_primary_key'] = true;
+        }
+
+        $analysis['is_likely_id'] = $this->isLikelyId($columnName, $columnInfoWithPK);
         $analysis['is_likely_foreign_key'] = $this->isLikelyForeignKey($columnName, $columnInfo, $primaryKey);
         $analysis['is_likely_title'] = $this->isLikelyTitle($columnName, $analysis);
         $analysis['is_likely_name'] = $this->isLikelyName($columnName, $analysis);
@@ -146,6 +152,12 @@ class DataAnalyzer extends WireData {
      * Check if column is likely an ID field
      */
     protected function isLikelyId($columnName, $columnInfo) {
+        // Check if it's the primary key (passed from analyze())
+        // This is set during column analysis with $primaryKey parameter
+        if (isset($columnInfo['is_primary_key']) && $columnInfo['is_primary_key']) {
+            return true;
+        }
+
         return (
             strtolower($columnName) === 'id' ||
             $columnInfo['auto_increment'] ?? false
