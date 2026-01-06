@@ -32,7 +32,8 @@ class SqlParser extends AbstractParser {
         }
 
         $firstLines = '';
-        for ($i = 0; $i < 10; $i++) {
+        // Read more lines to handle phpMyAdmin headers with SET statements
+        for ($i = 0; $i < 50; $i++) {
             $line = fgets($handle);
             if ($line === false) break;
             $firstLines .= $line;
@@ -89,6 +90,14 @@ class SqlParser extends AbstractParser {
                 if (empty($line) ||
                     substr($line, 0, 2) === '--' ||
                     substr($line, 0, 1) === '#') {
+                    continue;
+                }
+
+                // Skip MySQL-specific commands from phpMyAdmin dumps
+                if (stripos($line, 'SET ') === 0 ||
+                    stripos($line, 'START TRANSACTION') === 0 ||
+                    stripos($line, 'COMMIT') === 0 ||
+                    preg_match('/^\/\*!?\d*.*\*\/;?$/', $line)) {
                     continue;
                 }
             }
