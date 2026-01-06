@@ -395,13 +395,15 @@ class SqlParser extends AbstractParser {
      */
     protected function parseInsertStatement($sql, $tableName) {
         $rows = [];
+        $rows_processed = []; // CRITICAL: Initialize array!
 
         // Extract column names if specified
+        // Use /s modifier to handle multiline INSERT statements
         $columns = null;
-        if (preg_match('/INSERT INTO\s+`?[a-zA-Z0-9_]+`?\s+\(([^)]+)\)/i', $sql, $matches)) {
-            $columnStr = $matches[1];
+        if (preg_match('/INSERT\s+INTO\s+`?([a-zA-Z0-9_]+)`?\s*\(([^)]+)\)/is', $sql, $matches)) {
+            $columnStr = $matches[2]; // Column list is in second capture group
             $columns = array_map(function($col) {
-                return trim($col, '` ');
+                return trim($col, "` \n\r\t");
             }, explode(',', $columnStr));
         } else {
             // Use structure columns if available
@@ -434,10 +436,10 @@ class SqlParser extends AbstractParser {
                 }
             }
 
-            return $rows_processed ?? [];
+            return $rows_processed;
         }
 
-        return $rows;
+        return [];
     }
 
     /**
