@@ -163,18 +163,27 @@ class DataAnalyzer extends WireData {
     protected function isLikelyForeignKey($columnName, $columnInfo, $primaryKey = null) {
         $name = strtolower($columnName);
 
+        // DEBUG logging
+        $this->wire()->log->save('fk-detection', "Checking column: $columnName");
+        $this->wire()->log->save('fk-detection', "  Primary Key: " . ($primaryKey ?? 'NULL'));
+        $this->wire()->log->save('fk-detection', "  base_type: " . ($columnInfo['base_type'] ?? 'NULL'));
+        $this->wire()->log->save('fk-detection', "  auto_increment: " . (($columnInfo['auto_increment'] ?? false) ? 'true' : 'false'));
+
         // Skip if this is the primary key
         if ($primaryKey && strtolower($primaryKey) === $name) {
+            $this->wire()->log->save('fk-detection', "  → SKIP: Is primary key");
             return false;
         }
 
         // Skip if auto_increment (definitely a primary key)
         if ($columnInfo['auto_increment'] ?? false) {
+            $this->wire()->log->save('fk-detection', "  → SKIP: Has auto_increment");
             return false;
         }
 
         // Must be integer type for FK
         if (!in_array($columnInfo['base_type'] ?? '', ['integer'])) {
+            $this->wire()->log->save('fk-detection', "  → SKIP: Not integer type");
             return false;
         }
 
@@ -190,6 +199,7 @@ class DataAnalyzer extends WireData {
         // The value-based FK detection will determine the actual relationships
         // with confidence scores
 
+        $this->wire()->log->save('fk-detection', "  → MARK AS FK");
         return true;
     }
 
