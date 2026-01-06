@@ -142,12 +142,22 @@ class DataAnalyzer extends WireData {
         // Special flags
         // Mark if this column is the primary key
         $columnInfoWithPK = $columnInfo;
-        if ($primaryKey && strtolower($columnName) === strtolower($primaryKey)) {
+        $isPK = ($primaryKey && strtolower($columnName) === strtolower($primaryKey));
+        if ($isPK) {
             $columnInfoWithPK['is_primary_key'] = true;
         }
 
+        // DEBUG
+        $this->wire()->log->save('fk-detection', "\n=== ANALYZING FIELD: $columnName ===");
+        $this->wire()->log->save('fk-detection', "  Is PK check: " . ($isPK ? 'YES' : 'NO'));
+        $this->wire()->log->save('fk-detection', "  Primary Key param: " . ($primaryKey ?? 'NULL'));
+
         $analysis['is_likely_id'] = $this->isLikelyId($columnName, $columnInfoWithPK);
         $analysis['is_likely_foreign_key'] = $this->isLikelyForeignKey($columnName, $columnInfo, $primaryKey);
+
+        $this->wire()->log->save('fk-detection', "  → is_likely_id: " . ($analysis['is_likely_id'] ? 'true' : 'false'));
+        $this->wire()->log->save('fk-detection', "  → is_likely_foreign_key: " . ($analysis['is_likely_foreign_key'] ? 'true' : 'false'));
+
         $analysis['is_likely_title'] = $this->isLikelyTitle($columnName, $analysis);
         $analysis['is_likely_name'] = $this->isLikelyName($columnName, $analysis);
 
