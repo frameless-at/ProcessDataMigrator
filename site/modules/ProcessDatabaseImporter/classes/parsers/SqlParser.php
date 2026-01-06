@@ -246,6 +246,12 @@ class SqlParser extends AbstractParser {
                 // Check for AUTO_INCREMENT
                 $autoIncrement = stripos($line, 'AUTO_INCREMENT') !== false;
 
+                // Check for inline PRIMARY KEY definition
+                $isPrimaryKey = stripos($line, 'PRIMARY KEY') !== false;
+                if ($isPrimaryKey && !isset($this->tables[$tableName]['primary_key'])) {
+                    $this->tables[$tableName]['primary_key'] = $columnName;
+                }
+
                 // Check for DEFAULT value
                 $default = null;
                 if (preg_match('/DEFAULT\s+([^\s,]+)/i', $line, $defaultMatches)) {
