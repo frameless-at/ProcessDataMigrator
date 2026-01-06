@@ -261,6 +261,12 @@ class SqlParser extends AbstractParser {
                     $this->tables[$tableName]['primary_key'] = $columnName;
                 }
 
+                // AUTO_INCREMENT fields are typically primary keys
+                // Set as PK if no explicit PK has been defined yet
+                if ($autoIncrement && !isset($this->tables[$tableName]['primary_key'])) {
+                    $this->tables[$tableName]['primary_key'] = $columnName;
+                }
+
                 // Check for DEFAULT value
                 $default = null;
                 if (preg_match('/DEFAULT\s+([^\s,]+)/i', $line, $defaultMatches)) {
