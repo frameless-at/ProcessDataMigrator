@@ -95,9 +95,15 @@ class ImportProcessor extends WireData {
         // Set field values from mapping
         foreach ($mapping['fields'] as $sourceColumn => $fieldMapping) {
             $targetField = $fieldMapping['target_field'];
+            $fieldtype = $fieldMapping['fieldtype'];
 
             // Skip if field doesn't exist in template
             if (!$template->fieldgroup->hasField($targetField)) {
+                continue;
+            }
+
+            // Skip image/file fields - these need special handling with actual files
+            if (in_array($fieldtype, ['FieldtypeImage', 'FieldtypeFile'])) {
                 continue;
             }
 
