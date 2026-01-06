@@ -405,10 +405,16 @@ class SqlParser extends AbstractParser {
             $columns = array_map(function($col) {
                 return trim($col, "` \n\r\t");
             }, explode(',', $columnStr));
+
+            // DEBUG: Log extracted columns
+            wire()->log->save('db-importer', "Extracted columns from INSERT: " . implode(', ', $columns));
         } else {
             // Use structure columns if available
             if (isset($this->tables[$tableName]['structure'])) {
                 $columns = array_keys($this->tables[$tableName]['structure']);
+                wire()->log->save('db-importer', "Using structure columns: " . implode(', ', $columns));
+            } else {
+                wire()->log->save('db-importer', "WARNING: No columns found for table $tableName");
             }
         }
 
@@ -426,12 +432,14 @@ class SqlParser extends AbstractParser {
                     $combined = array_combine($columns, $values);
                     if ($combined === false) {
                         // Fallback to numeric keys if combine fails
+                        wire()->log->save('db-importer', "ERROR: array_combine failed for row");
                         $rows_processed[] = $values;
                     } else {
                         $rows_processed[] = $combined;
                     }
                 } else {
                     // If no columns or mismatch, use numeric keys
+                    wire()->log->save('db-importer', "WARNING: Column count mismatch. Columns: " . count($columns ?: []) . ", Values: " . count($values));
                     $rows_processed[] = $values;
                 }
             }
@@ -439,6 +447,7 @@ class SqlParser extends AbstractParser {
             return $rows_processed;
         }
 
+        wire()->log->save('db-importer', "ERROR: No VALUES clause found in INSERT statement");
         return [];
     }
 

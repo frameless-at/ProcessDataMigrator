@@ -86,13 +86,21 @@ class ProcessDatabaseImporter extends Process implements Module {
                 return $this->executeClear();
             }
             if ($action === 'import') {
+                $sessionData = $this->session->get(self::SESSION_KEY);
+
                 // Store selected tables if submitted via POST
                 if ($this->input->post('selected_tables')) {
                     $selectedTables = $this->input->post->array('selected_tables');
-                    $sessionData = $this->session->get(self::SESSION_KEY);
                     $sessionData['selected_tables'] = $selectedTables;
-                    $this->session->set(self::SESSION_KEY, $sessionData);
                 }
+
+                // Store selected fields if submitted via POST (independent of selected_tables!)
+                $selectedFields = $this->input->post('fields');
+                if ($selectedFields && is_array($selectedFields)) {
+                    $sessionData['selected_fields'] = $selectedFields;
+                }
+
+                $this->session->set(self::SESSION_KEY, $sessionData);
                 return $this->executeImport();
             }
             if ($action === 'rollback') {
@@ -392,6 +400,7 @@ class ProcessDatabaseImporter extends Process implements Module {
         $out .= '<table class="uk-table uk-table-striped uk-table-small">';
         $out .= '<thead>';
         $out .= '<tr>';
+        $out .= '<th style="width: 30px;">' . $this->_('Import') . '</th>';
         $out .= '<th>' . $this->_('Column') . '</th>';
         $out .= '<th>' . $this->_('SQL Type') . '</th>';
         $out .= '<th>' . $this->_('Detected Type') . '</th>';
@@ -403,8 +412,25 @@ class ProcessDatabaseImporter extends Process implements Module {
         $out .= '<tbody>';
 
         foreach ($analysis['columns'] as $column) {
+            $columnName = $column['name'];
+            $isIdField = $column['is_likely_id'];
+            $isTitleField = ($columnName === $analysis['suggested_title_field']);
+
+            // Checkbox: checked by default, except for ID fields
+            $checked = !$isIdField ? ' checked' : '';
+            // Title field is required, so make it disabled but checked
+            $disabled = $isTitleField ? ' disabled checked' : '';
+
             $out .= '<tr>';
-            $out .= '<td><strong>' . $this->sanitizer->entities($column['name']) . '</strong>';
+            $out .= '<td>';
+            // Use consistent format like table checkboxes: name="fields[table][]" value="fieldname"
+            $out .= '<input type="checkbox" name="fields[' . $tableName . '][]" value="' . $columnName . '"' . $checked . $disabled . '>';
+            // If disabled (title field), add hidden input to ensure it's included in POST
+            if ($disabled) {
+                $out .= '<input type="hidden" name="fields[' . $tableName . '][]" value="' . $columnName . '">';
+            }
+            $out .= '</td>';
+            $out .= '<td><strong>' . $this->sanitizer->entities($columnName) . '</strong>';
 
             // Add badges
             if ($column['is_likely_id']) {
@@ -535,6 +561,21 @@ class ProcessDatabaseImporter extends Process implements Module {
                 // Step 1: Create automatic mapping
                 $mappingEngine = $this->wire(new MappingEngine());
                 $mapping = $mappingEngine->createMapping($analysis, $tableName);
+
+                // Filter mapping to only include selected fields (if field selection was used)
+                if (isset($sessionData['selected_fields'])) {
+                    $selectedFields = $sessionData['selected_fields'][$tableName] ?? [];
+                    $filteredFields = [];
+                    foreach ($mapping['fields'] as $columnName => $fieldMapping) {
+                        // Include field if it's in selected array OR if it's the title field (always required)
+                        if (in_array($columnName, $selectedFields) || $columnName === $mapping['title_field']) {
+                            $filteredFields[$columnName] = $fieldMapping;
+                        }
+                    }
+                    $mapping['fields'] = $filteredFields;
+                    $fieldCount = count($filteredFields);
+                    $this->message($this->_("Filtered to $fieldCount selected field(s) for table {$tableName}"));
+                }
 
                 // Step 2: Create template and fields
                 $templateCreator = $this->wire(new TemplateCreator());

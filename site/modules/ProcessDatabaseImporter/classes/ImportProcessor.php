@@ -92,33 +92,46 @@ class ImportProcessor extends WireData {
             $n++;
         }
 
+        // DEBUG: Show what we're trying to import
+        $this->wire()->log->save('db-importer', "Processing row with title: $title");
+        $this->wire()->log->save('db-importer', "Row data columns: " . implode(', ', array_keys($row)));
+        $this->wire()->log->save('db-importer', "Mapping fields: " . implode(', ', array_keys($mapping['fields'])));
+
         // Set field values from mapping
         foreach ($mapping['fields'] as $sourceColumn => $fieldMapping) {
             $targetField = $fieldMapping['target_field'];
             $fieldtype = $fieldMapping['fieldtype'];
 
+            $this->wire()->log->save('db-importer', "Checking field: $sourceColumn -> $targetField ($fieldtype)");
+
             // Skip if field doesn't exist in template
             if (!$template->fieldgroup->hasField($targetField)) {
+                $this->wire()->log->save('db-importer', "  SKIP: Field $targetField not in template");
                 continue;
             }
 
             // Skip image/file fields - these need special handling with actual files
             if (in_array($fieldtype, ['FieldtypeImage', 'FieldtypeFile'])) {
+                $this->wire()->log->save('db-importer', "  SKIP: Field $targetField is image/file type");
                 continue;
             }
 
             // Skip if no data
             if (!isset($row[$sourceColumn])) {
+                $this->wire()->log->save('db-importer', "  SKIP: No data for source column $sourceColumn");
                 continue;
             }
 
             $value = $row[$sourceColumn];
+            $this->wire()->log->save('db-importer', "  Value from DB: " . var_export($value, true));
 
             // Convert value based on fieldtype
             $value = $this->convertValue($value, $fieldMapping);
+            $this->wire()->log->save('db-importer', "  Converted value: " . var_export($value, true));
 
             // Set field value
             $page->set($targetField, $value);
+            $this->wire()->log->save('db-importer', "  SET: $targetField = " . var_export($value, true));
         }
 
         // Save page
