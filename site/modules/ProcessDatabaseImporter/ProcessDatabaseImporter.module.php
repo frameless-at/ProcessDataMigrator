@@ -472,8 +472,7 @@ class ProcessDatabaseImporter extends Process implements Module {
         $out .= '<th>' . $this->_('Column') . '</th>';
         $out .= '<th>' . $this->_('SQL Type') . '</th>';
         $out .= '<th>' . $this->_('Detected Type') . '</th>';
-        $out .= '<th>' . $this->_('Suggested Fieldtype') . '</th>';
-        $out .= '<th style="width: 120px;">FK → Table</th>';
+        $out .= '<th style="min-width: 250px;">' . $this->_('Suggested Fieldtype') . '</th>';
         $out .= '<th>' . $this->_('Confidence') . '</th>';
         $out .= '<th>' . $this->_('Sample Values') . '</th>';
         $out .= '</tr>';
@@ -517,22 +516,23 @@ class ProcessDatabaseImporter extends Process implements Module {
             $out .= '</td>';
             $out .= '<td><code>' . $this->sanitizer->entities($column['sql_type']) . '</code></td>';
             $out .= '<td>' . $this->sanitizer->entities($column['detected_type']) . '</td>';
-            $out .= '<td>' . $this->buildFieldtypeSelector($tableName, $columnName, $column['suggested_fieldtype']) . '</td>';
 
-            // FK Table selection - only for potential FK fields
+            // Fieldtype + FK combined in one cell
+            $out .= '<td>';
+            $out .= $this->buildFieldtypeSelector($tableName, $columnName, $column['suggested_fieldtype']);
+
+            // Add FK dropdown inline for potential FK fields (integer fields, not ID)
             if ($isPotentialFk) {
-                $out .= '<td>';
+                $out .= ' <span style="color: #999;">│</span> FK: ';
                 $out .= '<select name="fk_table[' . $this->sanitizer->name($tableName) . '][' . $this->sanitizer->name($columnName) . ']" ';
-                $out .= 'class="uk-select" style="font-size: 11px; padding: 2px 4px;">';
+                $out .= 'class="uk-select" style="display: inline-block; width: auto; font-size: 12px; padding: 2px 6px;">';
                 $out .= '<option value="">--</option>';
                 foreach ($allTableNames as $tbl) {
                     $out .= '<option value="' . $this->sanitizer->entities($tbl) . '">' . $this->sanitizer->entities($tbl) . '</option>';
                 }
                 $out .= '</select>';
-                $out .= '</td>';
-            } else {
-                $out .= '<td style="background: #f5f5f5;"></td>';
             }
+            $out .= '</td>';
 
             // Confidence with color
             $confidence = $column['detection_confidence'];
