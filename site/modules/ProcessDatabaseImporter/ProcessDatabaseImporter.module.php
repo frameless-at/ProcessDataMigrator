@@ -75,6 +75,140 @@ class ProcessDatabaseImporter extends Process implements Module {
     }
 
     /**
+     * Validate and sanitize nested POST array data
+     *
+     * SECURITY NOTE: This method provides comprehensive validation for nested POST arrays
+     * that cannot be properly handled by ProcessWire's WireInput (which filters nested arrays).
+     *
+     * Protection measures:
+     * - Type checking (string/array validation at each level)
+     * - Regex sanitization (alphanumeric + underscore only)
+     * - Length limits (max 64 chars for identifiers)
+     * - Whitelist validation (optional table name verification)
+     * - Module existence check (for fieldtype class names)
+     * - SQL injection prevention (strict character filtering)
+     *
+     * @param string $key POST array key
+     * @param string $type Expected data type: 'string_array', 'nested_array', 'nested_mapping'
+     * @param array $allowedKeys Optional whitelist of allowed keys (for nested arrays)
+     * @return array|null Sanitized array or null if invalid/missing
+     */
+    protected function validatePostArray($key, $type = 'array', $allowedKeys = []) {
+        if (!isset($_POST[$key]) || !is_array($_POST[$key])) {
+            return null;
+        }
+
+        $data = $_POST[$key];
+
+        switch ($type) {
+            case 'string_array':
+                // Simple array of strings (e.g., selected_tables)
+                $sanitized = [];
+                foreach ($data as $value) {
+                    if (!is_string($value)) {
+                        continue;
+                    }
+                    // Sanitize as table/field name (alphanumeric + underscore)
+                    $clean = preg_replace('/[^a-zA-Z0-9_]/', '', $value);
+                    if (!empty($clean) && strlen($clean) <= 64) {
+                        $sanitized[] = $clean;
+                    }
+                }
+                return $sanitized;
+
+            case 'nested_array':
+                // Nested array like fields[table][column]
+                $sanitized = [];
+                foreach ($data as $table => $columns) {
+                    if (!is_string($table) || !is_array($columns)) {
+                        continue;
+                    }
+
+                    // Sanitize table name
+                    $cleanTable = preg_replace('/[^a-zA-Z0-9_]/', '', $table);
+                    if (empty($cleanTable) || strlen($cleanTable) > 64) {
+                        continue;
+                    }
+
+                    // Check against whitelist if provided
+                    if (!empty($allowedKeys) && !in_array($cleanTable, $allowedKeys)) {
+                        $this->warning(sprintf(
+                            $this->_('Skipped invalid table name in POST data: %s'),
+                            $this->sanitizer->entities($table)
+                        ));
+                        continue;
+                    }
+
+                    $sanitized[$cleanTable] = [];
+
+                    foreach ($columns as $column) {
+                        if (!is_string($column)) {
+                            continue;
+                        }
+                        // Sanitize column name
+                        $cleanColumn = preg_replace('/[^a-zA-Z0-9_]/', '', $column);
+                        if (!empty($cleanColumn) && strlen($cleanColumn) <= 64) {
+                            $sanitized[$cleanTable][] = $cleanColumn;
+                        }
+                    }
+                }
+                return $sanitized;
+
+            case 'nested_mapping':
+                // Nested mapping like fieldtypes[table][column] = value
+                $sanitized = [];
+                foreach ($data as $table => $columns) {
+                    if (!is_string($table) || !is_array($columns)) {
+                        continue;
+                    }
+
+                    $cleanTable = preg_replace('/[^a-zA-Z0-9_]/', '', $table);
+                    if (empty($cleanTable) || strlen($cleanTable) > 64) {
+                        continue;
+                    }
+
+                    // Check against whitelist if provided
+                    if (!empty($allowedKeys) && !in_array($cleanTable, $allowedKeys)) {
+                        continue;
+                    }
+
+                    $sanitized[$cleanTable] = [];
+
+                    foreach ($columns as $column => $value) {
+                        if (!is_string($column) || !is_string($value)) {
+                            continue;
+                        }
+
+                        $cleanColumn = preg_replace('/[^a-zA-Z0-9_]/', '', $column);
+                        // For fieldtype values, allow only known ProcessWire fieldtype class names
+                        $cleanValue = preg_replace('/[^a-zA-Z0-9]/', '', $value);
+
+                        if (!empty($cleanColumn) && !empty($cleanValue) &&
+                            strlen($cleanColumn) <= 64 && strlen($cleanValue) <= 64) {
+                            // Validate that fieldtype actually exists (if it's a fieldtype override)
+                            if (strpos($cleanValue, 'Fieldtype') === 0) {
+                                if ($this->modules->isInstalled($cleanValue)) {
+                                    $sanitized[$cleanTable][$cleanColumn] = $cleanValue;
+                                } else {
+                                    $this->warning(sprintf(
+                                        $this->_('Invalid fieldtype ignored: %s'),
+                                        $this->sanitizer->entities($value)
+                                    ));
+                                }
+                            } else {
+                                $sanitized[$cleanTable][$cleanColumn] = $cleanValue;
+                            }
+                        }
+                    }
+                }
+                return $sanitized;
+
+            default:
+                return null;
+        }
+    }
+
+    /**
      * Main execute method
      */
     public function ___execute() {
@@ -88,34 +222,62 @@ class ProcessDatabaseImporter extends Process implements Module {
             if ($action === 'import') {
                 $sessionData = $this->session->get(self::SESSION_KEY);
 
+                // Get list of valid table names from session for whitelist validation
+                $validTables = isset($sessionData['analysis']) ? array_keys($sessionData['analysis']) : [];
+
                 // Store selected tables if submitted via POST
-                if ($this->input->post('selected_tables')) {
-                    $selectedTables = $this->input->post->array('selected_tables');
-                    $sessionData['selected_tables'] = $selectedTables;
+                // SECURITY: Validate as simple string array with whitelist check
+                $selectedTables = $this->validatePostArray('selected_tables', 'string_array', $validTables);
+                if ($selectedTables !== null && !empty($selectedTables)) {
+                    // Additional validation: check against known tables from analysis
+                    $validatedTables = [];
+                    foreach ($selectedTables as $table) {
+                        if (in_array($table, $validTables)) {
+                            $validatedTables[] = $table;
+                        } else {
+                            $this->warning(sprintf(
+                                $this->_('Invalid table name ignored: %s'),
+                                $this->sanitizer->entities($table)
+                            ));
+                        }
+                    }
+                    if (!empty($validatedTables)) {
+                        $sessionData['selected_tables'] = $validatedTables;
+                    }
                 }
 
-                // Store selected fields if submitted via POST (independent of selected_tables!)
-                // CRITICAL: Use $_POST directly - WireInput filters nested arrays!
-                $selectedFields = isset($_POST['fields']) ? $_POST['fields'] : null;
-                if ($selectedFields && is_array($selectedFields)) {
+                // Store selected fields if submitted via POST
+                // SECURITY: Validate nested array structure with table whitelist
+                $selectedFields = $this->validatePostArray('fields', 'nested_array', $validTables);
+                if ($selectedFields !== null && !empty($selectedFields)) {
                     $sessionData['selected_fields'] = $selectedFields;
                 }
 
                 // Store fieldtype overrides if submitted via POST
-                // CRITICAL: Use $_POST directly - WireInput filters nested arrays!
-                $fieldtypeOverrides = isset($_POST['fieldtypes']) ? $_POST['fieldtypes'] : null;
-                if ($fieldtypeOverrides && is_array($fieldtypeOverrides)) {
+                // SECURITY: Validate nested mapping with fieldtype validation
+                $fieldtypeOverrides = $this->validatePostArray('fieldtypes', 'nested_mapping', $validTables);
+                if ($fieldtypeOverrides !== null && !empty($fieldtypeOverrides)) {
                     $sessionData['fieldtype_overrides'] = $fieldtypeOverrides;
                 }
 
                 // Store FK table mappings
-                $fkTables = isset($_POST['fk_table']) ? $_POST['fk_table'] : null;
-                if ($fkTables && is_array($fkTables)) {
+                // SECURITY: Validate nested mapping, reference tables must be in valid list
+                $fkTables = $this->validatePostArray('fk_table', 'nested_mapping', $validTables);
+                if ($fkTables !== null && !empty($fkTables)) {
                     $fkMappings = [];
                     foreach ($fkTables as $tableName => $columns) {
                         foreach ($columns as $columnName => $refTable) {
                             if (!empty($refTable)) {
-                                $fkMappings[$tableName][$columnName] = $refTable;
+                                // Validate that referenced table exists in our table list
+                                if (in_array($refTable, $validTables)) {
+                                    $fkMappings[$tableName][$columnName] = $refTable;
+                                } else {
+                                    $this->warning(sprintf(
+                                        $this->_('Invalid FK reference table ignored: %s → %s'),
+                                        $this->sanitizer->entities($columnName),
+                                        $this->sanitizer->entities($refTable)
+                                    ));
+                                }
                             }
                         }
                     }
