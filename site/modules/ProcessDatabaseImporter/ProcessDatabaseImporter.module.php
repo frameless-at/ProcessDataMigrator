@@ -108,6 +108,27 @@ class ProcessDatabaseImporter extends Process implements Module {
                     $sessionData['fieldtype_overrides'] = $fieldtypeOverrides;
                 }
 
+                // Store FK mappings if submitted via POST
+                $fkRefTable = isset($_POST['fk_ref_table']) ? $_POST['fk_ref_table'] : null;
+                $fkRefColumn = isset($_POST['fk_ref_column']) ? $_POST['fk_ref_column'] : null;
+                if ($fkRefTable && is_array($fkRefTable)) {
+                    $fkMappings = [];
+                    foreach ($fkRefTable as $tableName => $columns) {
+                        foreach ($columns as $columnName => $refTable) {
+                            if (!empty($refTable)) {
+                                $refColumn = isset($fkRefColumn[$tableName][$columnName]) ? $fkRefColumn[$tableName][$columnName] : 'id';
+                                $fkMappings[$tableName][$columnName] = [
+                                    'ref_table' => $refTable,
+                                    'ref_column' => $refColumn
+                                ];
+                            }
+                        }
+                    }
+                    if (!empty($fkMappings)) {
+                        $sessionData['fk_mappings'] = $fkMappings;
+                    }
+                }
+
                 $this->session->set(self::SESSION_KEY, $sessionData);
                 return $this->executeImport();
             }
@@ -332,8 +353,22 @@ class ProcessDatabaseImporter extends Process implements Module {
      * Build analysis view
      */
     protected function buildAnalysisView($analysis) {
+        $allTableNames = array_keys($analysis);
+
         $out = '<form method="post" action="' . $this->page->url . '">';
         $out .= '<div class="database-importer-analysis">';
+
+        // Add JavaScript for FK config toggle
+        $out .= '<script>
+        function toggleFKConfig(selectElement, configId) {
+            var configDiv = document.getElementById(configId);
+            if (selectElement.value === "FieldtypePage") {
+                configDiv.style.display = "block";
+            } else {
+                configDiv.style.display = "none";
+            }
+        }
+        </script>';
 
         // Summary
         $totalRows = array_sum(array_column($analysis, 'row_count'));
@@ -359,7 +394,7 @@ class ProcessDatabaseImporter extends Process implements Module {
 
         // Tables
         foreach ($analysis as $tableName => $tableAnalysis) {
-            $out .= $this->buildTableAnalysis($tableName, $tableAnalysis);
+            $out .= $this->buildTableAnalysis($tableName, $tableAnalysis, $allTableNames);
         }
 
         // Add action buttons inside the form
@@ -395,14 +430,18 @@ class ProcessDatabaseImporter extends Process implements Module {
     /**
      * Build fieldtype selector dropdown
      */
-    protected function buildFieldtypeSelector($tableName, $columnName, $suggested) {
+    protected function buildFieldtypeSelector($tableName, $columnName, $suggested, $allTableNames = []) {
         $fieldtypes = $this->getAvailableFieldtypes();
 
         // CRITICAL: Don't escape the square brackets in the name attribute!
         // entities() would convert [ to &#91; which breaks POST array structure
         $safeName = 'fieldtypes[' . $this->sanitizer->name($tableName) . '][' . $this->sanitizer->name($columnName) . ']';
 
-        $out = '<select name="' . $safeName . '" class="uk-select" style="font-size: 12px; padding: 2px 4px;">';
+        $fkConfigId = 'fk-config-' . $this->sanitizer->name($tableName) . '-' . $this->sanitizer->name($columnName);
+
+        $out = '<div>';
+        $out .= '<select name="' . $safeName . '" class="uk-select" style="font-size: 12px; padding: 2px 4px;" ';
+        $out .= 'onchange="toggleFKConfig(this, \'' . $fkConfigId . '\')">';
 
         foreach ($fieldtypes as $type => $label) {
             $selected = ($type === $suggested) ? ' selected' : '';
@@ -411,13 +450,34 @@ class ProcessDatabaseImporter extends Process implements Module {
 
         $out .= '</select>';
 
+        // FK Configuration Panel (initially hidden unless FieldtypePage is selected)
+        $display = ($suggested === 'FieldtypePage') ? 'block' : 'none';
+        $out .= '<div id="' . $fkConfigId . '" class="fk-config-panel" style="display:' . $display . '; margin:5px 0; padding:8px; background:#f0f8ff; border-left:3px solid #0066cc; font-size:11px;">';
+        $out .= '<strong style="font-size:10px;">🔗 Page Reference Configuration</strong><br>';
+
+        $out .= '<label style="font-size:10px; margin-top:5px; display:inline-block;">Referenced Table:</label> ';
+        $out .= '<select name="fk_ref_table[' . $this->sanitizer->name($tableName) . '][' . $this->sanitizer->name($columnName) . ']" style="font-size:10px; padding:2px;">';
+        $out .= '<option value="">-- Select Table --</option>';
+        foreach ($allTableNames as $tbl) {
+            $out .= '<option value="' . $this->sanitizer->entities($tbl) . '">' . $this->sanitizer->entities($tbl) . '</option>';
+        }
+        $out .= '</select><br>';
+
+        $out .= '<label style="font-size:10px; margin-top:3px; display:inline-block;">Referenced Column:</label> ';
+        $out .= '<input type="text" name="fk_ref_column[' . $this->sanitizer->name($tableName) . '][' . $this->sanitizer->name($columnName) . ']" ';
+        $out .= 'value="id" placeholder="id" style="width:60px; font-size:10px; padding:2px;"> ';
+        $out .= '<span style="font-size:9px; color:#666;">(usually "id")</span>';
+
+        $out .= '</div>';
+        $out .= '</div>';
+
         return $out;
     }
 
     /**
      * Build single table analysis view
      */
-    protected function buildTableAnalysis($tableName, $analysis) {
+    protected function buildTableAnalysis($tableName, $analysis, $allTableNames = []) {
         $out = '<div class="table-analysis uk-margin" style="border: 2px solid #ddd; padding: 15px; border-radius: 4px;">';
 
         // Checkbox for table selection
@@ -496,7 +556,7 @@ class ProcessDatabaseImporter extends Process implements Module {
             $out .= '</td>';
             $out .= '<td><code>' . $this->sanitizer->entities($column['sql_type']) . '</code></td>';
             $out .= '<td>' . $this->sanitizer->entities($column['detected_type']) . '</td>';
-            $out .= '<td>' . $this->buildFieldtypeSelector($tableName, $columnName, $column['suggested_fieldtype']) . '</td>';
+            $out .= '<td>' . $this->buildFieldtypeSelector($tableName, $columnName, $column['suggested_fieldtype'], $allTableNames) . '</td>';
 
             // Confidence with color
             $confidence = $column['detection_confidence'];
@@ -553,6 +613,70 @@ class ProcessDatabaseImporter extends Process implements Module {
     }
 
     /**
+     * Get or create the _sql_original_id field for FK tracking
+     */
+    protected function getOriginalIdField() {
+        $field = $this->fields->get('_sql_original_id');
+        if (!$field) {
+            $field = new Field();
+            $field->type = $this->modules->get('FieldtypeInteger');
+            $field->name = '_sql_original_id';
+            $field->label = 'Original SQL ID';
+            $field->flags = Field::flagSystem; // Hide from UI
+            $field->description = 'Stores the original SQL table ID for foreign key mapping';
+            $field->save();
+            $this->message($this->_('Created system field: _sql_original_id'));
+        }
+        return $field;
+    }
+
+    /**
+     * Sort tables by FK dependencies (topological sort)
+     */
+    protected function sortTablesByDependencies($tables, $fkMappings) {
+        if (empty($fkMappings)) {
+            return $tables; // No dependencies, keep original order
+        }
+
+        $dependencies = [];
+        $sorted = [];
+        $visited = [];
+
+        // Build dependency graph
+        foreach ($tables as $table) {
+            $dependencies[$table] = [];
+            if (isset($fkMappings[$table])) {
+                foreach ($fkMappings[$table] as $fkConfig) {
+                    $refTable = $fkConfig['ref_table'];
+                    if (in_array($refTable, $tables)) {
+                        $dependencies[$table][] = $refTable;
+                    }
+                }
+            }
+        }
+
+        // Topological sort using DFS
+        $visit = function($table) use (&$visit, &$visited, &$sorted, $dependencies) {
+            if (isset($visited[$table])) {
+                return;
+            }
+            $visited[$table] = true;
+
+            foreach ($dependencies[$table] as $dep) {
+                $visit($dep);
+            }
+
+            array_unshift($sorted, $table); // Add to front
+        };
+
+        foreach ($tables as $table) {
+            $visit($table);
+        }
+
+        return $sorted;
+    }
+
+    /**
      * Execute import process
      */
     protected function executeImport() {
@@ -580,6 +704,38 @@ class ProcessDatabaseImporter extends Process implements Module {
         if (empty($selectedTables)) {
             $this->error($this->_('No tables selected for import.'));
             $this->session->redirect($this->page->url);
+        }
+
+        // Get FK mappings
+        $fkMappings = $sessionData['fk_mappings'] ?? [];
+
+        // Sort tables by dependencies
+        if (!empty($fkMappings)) {
+            $this->message($this->_('Analyzing dependencies...'));
+            $sortedTables = $this->sortTablesByDependencies($selectedTables, $fkMappings);
+
+            // Show dependency info
+            foreach ($fkMappings as $table => $fks) {
+                if (!in_array($table, $selectedTables)) continue;
+                foreach ($fks as $column => $fkConfig) {
+                    $refTable = $fkConfig['ref_table'];
+                    if (in_array($refTable, $selectedTables)) {
+                        $this->message($this->_("  → {$refTable} must be imported before {$table} (FK: {$column})"));
+                    }
+                }
+            }
+            $selectedTables = $sortedTables;
+        }
+
+        // Determine which tables need _sql_original_id field
+        $tablesNeedingOriginalId = [];
+        foreach ($fkMappings as $sourceTbl => $fks) {
+            foreach ($fks as $fkConfig) {
+                $targetTbl = $fkConfig['ref_table'];
+                if (!in_array($targetTbl, $tablesNeedingOriginalId)) {
+                    $tablesNeedingOriginalId[] = $targetTbl;
+                }
+            }
         }
 
         // Import each selected table
@@ -665,11 +821,35 @@ class ProcessDatabaseImporter extends Process implements Module {
                     }
                 }
 
+                // Apply FK config to mapping
+                if (isset($fkMappings[$tableName])) {
+                    foreach ($fkMappings[$tableName] as $sourceColumn => $fkConfig) {
+                        // Find the field in mapping
+                        foreach ($mapping['fields'] as $fieldName => $fieldMapping) {
+                            if ($fieldMapping['source_column'] === $sourceColumn) {
+                                $mapping['fields'][$fieldName]['fk_config'] = $fkConfig;
+                                $this->message($this->_("FK: {$sourceColumn} → {$fkConfig['ref_table']}.{$fkConfig['ref_column']}"));
+                                break;
+                            }
+                        }
+                    }
+                }
+
                 // Step 2: Create template and fields
                 $templateCreator = $this->wire(new TemplateCreator());
                 $template = $templateCreator->createTemplate($mapping);
 
                 $this->message($this->_('Created template: ') . $template->name);
+
+                // Add _sql_original_id field if this table is referenced by FK
+                if (in_array($tableName, $tablesNeedingOriginalId)) {
+                    $originalIdField = $this->getOriginalIdField();
+                    if (!$template->fieldgroup->hasField($originalIdField)) {
+                        $template->fieldgroup->add($originalIdField);
+                        $template->fieldgroup->save();
+                        $this->message($this->_("  → Added _sql_original_id field (for FK lookups)"));
+                    }
+                }
 
                 // Step 3: Create parent page
                 $parent = $templateCreator->createParentPage($mapping['parent'], $template->name);
@@ -685,6 +865,8 @@ class ProcessDatabaseImporter extends Process implements Module {
                 }
 
                 $importProcessor = $this->wire(new ImportProcessor());
+                $importProcessor->setFkMappings($fkMappings);
+                $importProcessor->setCurrentTable($tableName);
                 $result = $importProcessor->import($importData, $mapping, $template, $parent);
 
                 $totalImported += $result['imported'];
