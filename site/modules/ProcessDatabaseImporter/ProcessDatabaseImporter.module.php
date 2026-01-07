@@ -617,36 +617,39 @@ class ProcessDatabaseImporter extends Process implements Module {
                 if (isset($sessionData['fieldtype_overrides'][$tableName])) {
                     $overrides = $sessionData['fieldtype_overrides'][$tableName];
                     $overrideCount = 0;
-                    foreach ($mapping['fields'] as $columnName => $fieldMapping) {
-                        if (isset($overrides[$columnName]) && $overrides[$columnName] !== $fieldMapping['fieldtype']) {
+                    foreach ($mapping['fields'] as $fieldName => $fieldMapping) {
+                        // CRITICAL: Use source_column, not the prefixed field name!
+                        $sourceColumn = $fieldMapping['source_column'];
+
+                        if (isset($overrides[$sourceColumn]) && $overrides[$sourceColumn] !== $fieldMapping['fieldtype']) {
                             $oldType = $fieldMapping['fieldtype'];
-                            $newType = $overrides[$columnName];
-                            $mapping['fields'][$columnName]['fieldtype'] = $newType;
+                            $newType = $overrides[$sourceColumn];
+                            $mapping['fields'][$fieldName]['fieldtype'] = $newType;
                             $overrideCount++;
-                            $this->message($this->_("Override: {$columnName} changed from {$oldType} to {$newType}"));
+                            $this->message($this->_("Override: {$sourceColumn} changed from {$oldType} to {$newType}"));
 
                             // CRITICAL: If changed to FieldtypeOptions, copy options from analysis
                             if ($newType === 'FieldtypeOptions') {
-                                $columnData = $analysis['columns'][$columnName] ?? null;
+                                $columnData = $analysis['columns'][$sourceColumn] ?? null;
                                 if ($columnData && isset($columnData['options'])) {
-                                    $mapping['fields'][$columnName]['options'] = $columnData['options'];
+                                    $mapping['fields'][$fieldName]['options'] = $columnData['options'];
                                     $optionCount = count($columnData['options']);
                                     $this->message($this->_("  → Added {$optionCount} option(s): " . implode(', ', array_slice($columnData['options'], 0, 5)) . (count($columnData['options']) > 5 ? '...' : '')));
                                 } else {
                                     // No options available - extract unique values from data
                                     $values = [];
                                     foreach ($tableData['data'] as $row) {
-                                        if (isset($row[$columnName]) && $row[$columnName] !== null && $row[$columnName] !== '') {
-                                            $values[] = $row[$columnName];
+                                        if (isset($row[$sourceColumn]) && $row[$sourceColumn] !== null && $row[$sourceColumn] !== '') {
+                                            $values[] = $row[$sourceColumn];
                                         }
                                     }
                                     $uniqueValues = array_values(array_unique($values));
                                     if (!empty($uniqueValues)) {
-                                        $mapping['fields'][$columnName]['options'] = $uniqueValues;
+                                        $mapping['fields'][$fieldName]['options'] = $uniqueValues;
                                         $uniqueCount = count($uniqueValues);
                                         $this->message($this->_("  → Extracted {$uniqueCount} unique values as options"));
                                     } else {
-                                        $this->warning($this->_("  → No options available for {$columnName} - field will be created without selectable options"));
+                                        $this->warning($this->_("  → No options available for {$sourceColumn} - field will be created without selectable options"));
                                     }
                                 }
                             }
