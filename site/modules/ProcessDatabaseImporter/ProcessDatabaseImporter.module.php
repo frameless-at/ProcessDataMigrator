@@ -470,7 +470,6 @@ class ProcessDatabaseImporter extends Process implements Module {
         $out .= '<tr>';
         $out .= '<th style="width: 30px;">' . $this->_('Import') . '</th>';
         $out .= '<th>' . $this->_('Column') . '</th>';
-        $out .= '<th>' . $this->_('SQL Type') . '</th>';
         $out .= '<th>' . $this->_('Detected Type') . '</th>';
         $out .= '<th style="min-width: 250px;">' . $this->_('Suggested Fieldtype') . '</th>';
         $out .= '<th>' . $this->_('Confidence') . '</th>';
@@ -514,7 +513,6 @@ class ProcessDatabaseImporter extends Process implements Module {
             }
 
             $out .= '</td>';
-            $out .= '<td><code>' . $this->sanitizer->entities($column['sql_type']) . '</code></td>';
             $out .= '<td>' . $this->sanitizer->entities($column['detected_type']) . '</td>';
 
             // Fieldtype + FK combined in one cell
