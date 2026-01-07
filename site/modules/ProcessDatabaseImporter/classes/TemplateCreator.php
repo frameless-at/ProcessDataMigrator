@@ -159,10 +159,43 @@ class TemplateCreator extends WireData {
         $templateName = $this->sanitizeTemplateName($referenceTable);
         $template = $this->wire('templates')->get($templateName);
 
-        if ($template) {
-            $field->template_id = $template->id;
-            $field->parent_id = 0; // Allow from any parent
-            $field->inputfield = 'InputfieldSelect';
+        if (!$template) {
+            $this->wire()->warning("Template '{$templateName}' not found for Page Reference field '{$field->name}'");
+            return;
+        }
+
+        // Find parent page where referenced pages are stored
+        // Try to find pages with this template
+        $parentId = 0;
+        $referencedPages = $this->wire('pages')->find("template={$template->name}, limit=1");
+        if ($referencedPages->count() > 0) {
+            $parentId = $referencedPages->first()->parent_id;
+        }
+
+        // If no pages found, try to find a parent page named like the table
+        if (!$parentId) {
+            $parentPath = "/imports/" . $this->sanitizeTemplateName($referenceTable) . "/";
+            $parentPage = $this->wire('pages')->get($parentPath);
+            if ($parentPage->id) {
+                $parentId = $parentPage->id;
+            }
+        }
+
+        // Configure the field as single-page reference
+        $field->derefAsPage = 1; // Single page (not PageArray)
+        $field->template_id = $template->id;
+        $field->parent_id = $parentId; // 0 = any parent if not found
+        $field->labelFieldName = 'title'; // Use title field for display
+        $field->inputfield = 'InputfieldSelect'; // Select dropdown
+        $field->findPagesSelector = "template={$template->name}"; // Selector to find selectable pages
+
+        // Save field with updated configuration
+        $field->save();
+
+        if ($parentId) {
+            $this->wire()->message("Page Reference field '{$field->name}' configured: template={$template->name}, parent={$parentId}");
+        } else {
+            $this->wire()->warning("Page Reference field '{$field->name}' configured without specific parent (will show all pages with template={$template->name})");
         }
     }
 

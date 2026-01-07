@@ -478,6 +478,8 @@ class ProcessDatabaseImporter extends Process implements Module {
         $out .= '<th>' . $this->_('SQL Type') . '</th>';
         $out .= '<th>' . $this->_('Detected Type') . '</th>';
         $out .= '<th>' . $this->_('Suggested Fieldtype') . '</th>';
+        $out .= '<th style="width: 140px;">FK → Table</th>';
+        $out .= '<th style="width: 70px;">FK → Column</th>';
         $out .= '<th>' . $this->_('Confidence') . '</th>';
         $out .= '<th>' . $this->_('Sample Values') . '</th>';
         $out .= '</tr>';
@@ -488,6 +490,12 @@ class ProcessDatabaseImporter extends Process implements Module {
             $columnName = $column['name'];
             $isIdField = $column['is_likely_id'];
             $isTitleField = ($columnName === $analysis['suggested_title_field']);
+
+            // Determine if this field could be a FK
+            $isPotentialFk = (
+                in_array($column['detected_type'], ['integer', 'int']) &&
+                (stripos($columnName, 'id') !== false || stripos($columnName, '_fk') !== false)
+            ) || ($column['suggested_fieldtype'] === 'FieldtypePage');
 
             // Checkbox: checked by default, except for ID fields
             $checked = !$isIdField ? ' checked' : '';
@@ -520,6 +528,29 @@ class ProcessDatabaseImporter extends Process implements Module {
             $out .= '<td>' . $this->sanitizer->entities($column['detected_type']) . '</td>';
             $out .= '<td>' . $this->buildFieldtypeSelector($tableName, $columnName, $column['suggested_fieldtype']) . '</td>';
 
+            // FK Reference columns - only show for potential FK fields
+            if ($isPotentialFk) {
+                // Referenced Table
+                $out .= '<td>';
+                $out .= '<select name="fk_ref_table[' . $this->sanitizer->name($tableName) . '][' . $this->sanitizer->name($columnName) . ']" ';
+                $out .= 'class="uk-select" style="font-size: 11px; padding: 2px 4px;">';
+                $out .= '<option value="">--</option>';
+                foreach ($allTableNames as $tbl) {
+                    $out .= '<option value="' . $this->sanitizer->entities($tbl) . '">' . $this->sanitizer->entities($tbl) . '</option>';
+                }
+                $out .= '</select>';
+                $out .= '</td>';
+
+                // Referenced Column
+                $out .= '<td>';
+                $out .= '<input type="text" ';
+                $out .= 'name="fk_ref_column[' . $this->sanitizer->name($tableName) . '][' . $this->sanitizer->name($columnName) . ']" ';
+                $out .= 'value="id" placeholder="id" class="uk-input" style="font-size: 11px; padding: 2px 4px; width: 100%;">';
+                $out .= '</td>';
+            } else {
+                $out .= '<td style="background: #f5f5f5;"></td><td style="background: #f5f5f5;"></td>';
+            }
+
             // Confidence with color
             $confidence = $column['detection_confidence'];
             $color = $confidence >= 80 ? 'success' : ($confidence >= 60 ? 'warning' : 'danger');
@@ -538,76 +569,6 @@ class ProcessDatabaseImporter extends Process implements Module {
 
         $out .= '</tbody>';
         $out .= '</table>';
-
-        // FK Configuration Section - show for all potential FK fields
-        // Include: fields suggested as Page Reference OR integer fields with "id" in name
-        $potentialFkFields = [];
-        foreach ($analysis['columns'] as $column) {
-            $columnName = $column['name'];
-            $isPageRef = ($column['suggested_fieldtype'] === 'FieldtypePage');
-            $isIntWithId = (
-                in_array($column['detected_type'], ['integer', 'int']) &&
-                (stripos($columnName, 'id') !== false || stripos($columnName, '_fk') !== false)
-            );
-
-            if ($isPageRef || $isIntWithId) {
-                $potentialFkFields[] = [
-                    'name' => $columnName,
-                    'type' => $column['suggested_fieldtype'],
-                    'is_page_ref' => $isPageRef
-                ];
-            }
-        }
-
-        if (!empty($potentialFkFields)) {
-            $out .= '<div style="margin-top: 15px; padding: 15px; background: #f9f9f9; border-left: 4px solid #0066cc; border-radius: 4px;">';
-            $out .= '<h4 style="margin: 0 0 10px 0; font-size: 14px; color: #0066cc;">🔗 Foreign Key Configuration</h4>';
-            $out .= '<p style="margin: 0 0 10px 0; font-size: 11px; color: #666;">';
-            $out .= 'Configure Foreign Key mappings for Page Reference fields. ';
-            $out .= 'Only configure fields that you set to "Page Reference" above.';
-            $out .= '</p>';
-
-            foreach ($potentialFkFields as $field) {
-                $fieldName = $field['name'];
-                $bgColor = $field['is_page_ref'] ? 'white' : '#fafafa';
-                $borderColor = $field['is_page_ref'] ? '#0066cc' : '#ddd';
-
-                $out .= '<div style="margin-bottom: 12px; padding: 10px; background: ' . $bgColor . '; border: 1px solid ' . $borderColor . '; border-radius: 3px;">';
-                $out .= '<label style="display: block; font-weight: bold; margin-bottom: 5px; font-size: 13px;">';
-                $out .= $this->sanitizer->entities($fieldName);
-                if ($field['is_page_ref']) {
-                    $out .= ' <span style="color: #0066cc; font-size: 11px; font-weight: normal;">(Page Reference)</span>';
-                }
-                $out .= '</label>';
-
-                $out .= '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">';
-
-                // Referenced Table
-                $out .= '<div>';
-                $out .= '<label style="display: block; font-size: 11px; margin-bottom: 3px; color: #666;">Referenced Table:</label>';
-                $out .= '<select name="fk_ref_table[' . $this->sanitizer->name($tableName) . '][' . $this->sanitizer->name($fieldName) . ']" ';
-                $out .= 'class="uk-select" style="font-size: 12px; width: 100%;">';
-                $out .= '<option value="">-- Select Table --</option>';
-                foreach ($allTableNames as $tbl) {
-                    $out .= '<option value="' . $this->sanitizer->entities($tbl) . '">' . $this->sanitizer->entities($tbl) . '</option>';
-                }
-                $out .= '</select>';
-                $out .= '</div>';
-
-                // Referenced Column
-                $out .= '<div>';
-                $out .= '<label style="display: block; font-size: 11px; margin-bottom: 3px; color: #666;">Referenced Column:</label>';
-                $out .= '<input type="text" ';
-                $out .= 'name="fk_ref_column[' . $this->sanitizer->name($tableName) . '][' . $this->sanitizer->name($fieldName) . ']" ';
-                $out .= 'value="id" placeholder="id" class="uk-input" style="font-size: 12px; width: 100%;">';
-                $out .= '</div>';
-
-                $out .= '</div>'; // grid
-                $out .= '</div>'; // field container
-            }
-
-            $out .= '</div>'; // FK config section
-        }
 
         // Info about special fieldtypes
         $out .= '<div class="uk-alert uk-alert-primary" style="margin-top: 10px; font-size: 11px;">';
@@ -852,6 +813,7 @@ class ProcessDatabaseImporter extends Process implements Module {
                         foreach ($mapping['fields'] as $fieldName => $fieldMapping) {
                             if ($fieldMapping['source_column'] === $sourceColumn) {
                                 $mapping['fields'][$fieldName]['fk_config'] = $fkConfig;
+                                $mapping['fields'][$fieldName]['reference_table'] = $fkConfig['ref_table']; // For TemplateCreator
                                 $this->message($this->_("FK: {$sourceColumn} → {$fkConfig['ref_table']}.{$fkConfig['ref_column']}"));
                                 break;
                             }
