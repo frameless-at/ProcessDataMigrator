@@ -393,7 +393,8 @@ class ProcessDatabaseImporter extends Process implements Module {
             return;
         }
 
-        $out = $this->buildAnalysisView($analysis);
+        // Pass session data to preserve user selections after errors
+        $out = $this->buildAnalysisView($analysis, $sessionData);
 
         return $out;
     }
@@ -513,7 +514,7 @@ class ProcessDatabaseImporter extends Process implements Module {
     /**
      * Build analysis view
      */
-    protected function buildAnalysisView($analysis) {
+    protected function buildAnalysisView($analysis, $sessionData = []) {
         $allTableNames = array_keys($analysis);
 
         $out = '<form method="post" action="' . $this->page->url . '">';
@@ -542,7 +543,7 @@ class ProcessDatabaseImporter extends Process implements Module {
 
         // Tables
         foreach ($analysis as $tableName => $tableAnalysis) {
-            $out .= $this->buildTableAnalysis($tableName, $tableAnalysis, $allTableNames);
+            $out .= $this->buildTableAnalysis($tableName, $tableAnalysis, $allTableNames, $sessionData);
         }
 
         // Add action buttons inside the form
@@ -578,8 +579,11 @@ class ProcessDatabaseImporter extends Process implements Module {
     /**
      * Build fieldtype selector dropdown
      */
-    protected function buildFieldtypeSelector($tableName, $columnName, $suggested) {
+    protected function buildFieldtypeSelector($tableName, $columnName, $suggested, $sessionData = []) {
         $fieldtypes = $this->getAvailableFieldtypes();
+
+        // Check if there's a fieldtype override from session data
+        $selectedFieldtype = $sessionData['fieldtype_overrides'][$tableName][$columnName] ?? $suggested;
 
         // CRITICAL: Don't escape the square brackets in the name attribute!
         // entities() would convert [ to &#91; which breaks POST array structure
@@ -588,7 +592,7 @@ class ProcessDatabaseImporter extends Process implements Module {
         $out = '<select name="' . $safeName . '" class="uk-select" style="font-size: 12px; padding: 2px 4px;">';
 
         foreach ($fieldtypes as $type => $label) {
-            $selected = ($type === $suggested) ? ' selected' : '';
+            $selected = ($type === $selectedFieldtype) ? ' selected' : '';
             $out .= '<option value="' . $this->sanitizer->entities($type) . '"' . $selected . '>' . $this->sanitizer->entities($label) . '</option>';
         }
 
@@ -600,13 +604,17 @@ class ProcessDatabaseImporter extends Process implements Module {
     /**
      * Build single table analysis view
      */
-    protected function buildTableAnalysis($tableName, $analysis, $allTableNames = []) {
+    protected function buildTableAnalysis($tableName, $analysis, $allTableNames = [], $sessionData = []) {
         $out = '<div class="table-analysis uk-margin" style="border: 2px solid #ddd; padding: 15px; border-radius: 4px;">';
 
-        // Checkbox for table selection
+        // Checkbox for table selection - check session data for previous selection
+        $selectedTables = $sessionData['selected_tables'] ?? [];
+        $isTableSelected = empty($selectedTables) || in_array($tableName, $selectedTables);
+        $tableChecked = $isTableSelected ? ' checked' : '';
+
         $out .= '<div style="margin-bottom: 10px;">';
         $out .= '<label style="font-size: 16px; font-weight: bold;">';
-        $out .= '<input type="checkbox" name="selected_tables[]" value="' . $this->sanitizer->entities($tableName) . '" checked> ';
+        $out .= '<input type="checkbox" name="selected_tables[]" value="' . $this->sanitizer->entities($tableName) . '"' . $tableChecked . '> ';
         $out .= $this->sanitizer->entities($tableName);
         $out .= '</label>';
         $out .= '</div>';
@@ -656,8 +664,16 @@ class ProcessDatabaseImporter extends Process implements Module {
                 !$isIdField // Not the main ID field
             );
 
-            // Checkbox: checked by default, except for ID fields
-            $checked = !$isIdField ? ' checked' : '';
+            // Checkbox: use session data if available, otherwise default behavior
+            $selectedFields = $sessionData['selected_fields'][$tableName] ?? null;
+            if ($selectedFields !== null) {
+                // Use session data
+                $isFieldSelected = in_array($columnName, $selectedFields);
+                $checked = $isFieldSelected ? ' checked' : '';
+            } else {
+                // Default: checked for non-ID fields
+                $checked = !$isIdField ? ' checked' : '';
+            }
             // Title field is required, so make it disabled but checked
             $disabled = $isTitleField ? ' disabled checked' : '';
 
@@ -684,16 +700,20 @@ class ProcessDatabaseImporter extends Process implements Module {
             // Fieldtype + FK combined in one cell
             $out .= '<td style="white-space: nowrap;">';
             $out .= '<div style="display: flex; align-items: center; gap: 8px;">';
-            $out .= $this->buildFieldtypeSelector($tableName, $columnName, $column['suggested_fieldtype']);
+            $out .= $this->buildFieldtypeSelector($tableName, $columnName, $column['suggested_fieldtype'], $sessionData);
 
             // Add FK dropdown inline for potential FK fields (integer fields, not ID)
             if ($isPotentialFk) {
+                // Get selected FK from session data
+                $selectedFk = $sessionData['fk_mappings'][$tableName][$columnName] ?? '';
+
                 $out .= '<span style="color: #666; font-size: 11px;">FK:</span>';
                 $out .= '<select name="fk_table[' . $this->sanitizer->name($tableName) . '][' . $this->sanitizer->name($columnName) . ']" ';
                 $out .= 'class="uk-select" style="font-size: 12px; padding: 2px 6px; width: auto; min-width: 100px;">';
                 $out .= '<option value="">--</option>';
                 foreach ($allTableNames as $tbl) {
-                    $out .= '<option value="' . $this->sanitizer->entities($tbl) . '">' . $this->sanitizer->entities($tbl) . '</option>';
+                    $selected = ($tbl === $selectedFk) ? ' selected' : '';
+                    $out .= '<option value="' . $this->sanitizer->entities($tbl) . '"' . $selected . '>' . $this->sanitizer->entities($tbl) . '</option>';
                 }
                 $out .= '</select>';
             }
@@ -946,9 +966,12 @@ class ProcessDatabaseImporter extends Process implements Module {
                 $selectedTables = $sortedTables;
             } catch (\Exception $e) {
                 // Circular FK dependency detected - show error and return to analysis view
+                // IMPORTANT: Keep session data so user selections are preserved
                 $this->error($e->getMessage());
                 $this->error($this->_('Please uncheck one of the FK dropdowns in the cycle to break the circular dependency, then try importing again.'));
-                return $this->executeAnalyze();
+
+                // Return analysis view with preserved session data
+                return $this->___executeAnalyze();
             }
         }
 
