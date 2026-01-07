@@ -112,9 +112,10 @@ class ImportProcessor extends WireData {
         $this->wire()->log->save('db-importer', "Mapping fields: " . implode(', ', array_keys($mapping['fields'])));
 
         // Set field values from mapping
-        foreach ($mapping['fields'] as $sourceColumn => $fieldMapping) {
+        foreach ($mapping['fields'] as $fieldName => $fieldMapping) {
             $targetField = $fieldMapping['target_field'];
             $fieldtype = $fieldMapping['fieldtype'];
+            $sourceColumn = $fieldMapping['source_column']; // CRITICAL: Use actual SQL column name!
 
             $this->wire()->log->save('db-importer', "Checking field: $sourceColumn -> $targetField ($fieldtype)");
 
