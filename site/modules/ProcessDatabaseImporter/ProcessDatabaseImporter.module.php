@@ -889,77 +889,6 @@ class ProcessDatabaseImporter extends Process implements Module {
     }
 
     /**
-     * Show elegant error for circular FK dependencies
-     */
-    protected function showCycleError($errorMessage, $sessionData) {
-        $this->headline('Database Import - Circular Dependency Detected');
-
-        // Extract cycle path from error message
-        preg_match('/: (.+)\. Please/', $errorMessage, $matches);
-        $cyclePath = $matches[1] ?? 'Unknown cycle';
-
-        $out = '';
-
-        // Prominent error box with visual cycle representation
-        $out .= '<div style="background: #fff3cd; border: 3px solid #ffc107; border-radius: 8px; padding: 25px; margin: 20px 0; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">';
-        $out .= '<div style="display: flex; align-items: flex-start; gap: 20px;">';
-
-        // Warning icon
-        $out .= '<div style="flex-shrink: 0;">';
-        $out .= '<i class="fa fa-exclamation-triangle" style="font-size: 48px; color: #ff9800;"></i>';
-        $out .= '</div>';
-
-        // Error content
-        $out .= '<div style="flex: 1;">';
-        $out .= '<h3 style="margin: 0 0 15px 0; color: #d32f2f; font-size: 20px;">';
-        $out .= '<i class="fa fa-ban"></i> ' . $this->_('Circular Foreign Key Dependency Detected');
-        $out .= '</h3>';
-
-        $out .= '<p style="font-size: 15px; line-height: 1.6; margin: 0 0 15px 0;">';
-        $out .= $this->_('The import cannot proceed because the selected Foreign Key mappings create a circular reference:');
-        $out .= '</p>';
-
-        // Visual cycle representation
-        $out .= '<div style="background: white; border: 2px dashed #ff9800; border-radius: 6px; padding: 15px; margin: 15px 0; font-family: monospace;">';
-        $out .= '<div style="font-size: 16px; font-weight: bold; color: #d32f2f; text-align: center;">';
-        $out .= $this->sanitizer->entities($cyclePath);
-        $out .= '</div>';
-        $out .= '</div>';
-
-        // Explanation
-        $out .= '<div style="background: #f5f5f5; border-left: 4px solid #2196F3; padding: 12px 15px; margin: 15px 0; border-radius: 4px;">';
-        $out .= '<p style="margin: 0 0 10px 0; font-weight: bold; color: #1976D2;">';
-        $out .= '<i class="fa fa-info-circle"></i> ' . $this->_('Why is this a problem?');
-        $out .= '</p>';
-        $out .= '<p style="margin: 0; font-size: 14px; line-height: 1.5;">';
-        $out .= $this->_('Each table in the cycle requires another table to exist first, creating an impossible import order. No table can be imported without violating a Foreign Key constraint.');
-        $out .= '</p>';
-        $out .= '</div>';
-
-        // Solution steps
-        $out .= '<div style="background: #e8f5e9; border-left: 4px solid #4CAF50; padding: 12px 15px; margin: 15px 0; border-radius: 4px;">';
-        $out .= '<p style="margin: 0 0 10px 0; font-weight: bold; color: #2E7D32;">';
-        $out .= '<i class="fa fa-lightbulb-o"></i> ' . $this->_('How to fix:');
-        $out .= '</p>';
-        $out .= '<ol style="margin: 0; padding-left: 20px; font-size: 14px; line-height: 1.8;">';
-        $out .= '<li>' . $this->_('Scroll down to the tables shown in the cycle above') . '</li>';
-        $out .= '<li>' . $this->_('Find one of the Foreign Key dropdown fields involved in the cycle') . '</li>';
-        $out .= '<li>' . $this->_('Change the dropdown from the table name to <strong>"-- None --"</strong>') . '</li>';
-        $out .= '<li>' . $this->_('Click "Import Selected Tables" again') . '</li>';
-        $out .= '</ol>';
-        $out .= '</div>';
-
-        $out .= '</div>'; // End content
-        $out .= '</div>'; // End flex container
-        $out .= '</div>'; // End error box
-
-        // Show the analysis view again so user can fix FK mappings
-        $out .= $this->buildAnalysisView($sessionData);
-
-        return $out;
-    }
-
-    /**
      * Execute import process
      */
     protected function executeImport() {
@@ -1011,14 +940,9 @@ class ProcessDatabaseImporter extends Process implements Module {
 
         // Sort tables by dependencies (referenced tables must be imported first)
         if (!empty($fkMappings)) {
-            try {
-                $sortedTables = $this->sortTablesByDependencies($selectedTables, $fkMappings);
-                $this->message($this->_('Tables sorted by dependencies: ' . implode(' → ', $sortedTables)));
-                $selectedTables = $sortedTables;
-            } catch (\Exception $e) {
-                // CIRCULAR FK DEPENDENCY DETECTED - Show elegant error and return to analysis
-                return $this->showCycleError($e->getMessage(), $sessionData);
-            }
+            $sortedTables = $this->sortTablesByDependencies($selectedTables, $fkMappings);
+            $this->message($this->_('Tables sorted by dependencies: ' . implode(' → ', $sortedTables)));
+            $selectedTables = $sortedTables;
         }
 
         // Import each selected table
