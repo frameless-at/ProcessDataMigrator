@@ -53,7 +53,7 @@ class Logger extends WireData {
      *
      * @param string $message
      */
-    public function error($message) {
+    public function logError($message) {
         if ($this->level >= self::ERROR) {
             $this->write('ERROR', $message);
         }
@@ -64,7 +64,7 @@ class Logger extends WireData {
      *
      * @param string $message
      */
-    public function warning($message) {
+    public function logWarning($message) {
         if ($this->level >= self::WARNING) {
             $this->write('WARNING', $message);
         }
@@ -75,7 +75,7 @@ class Logger extends WireData {
      *
      * @param string $message
      */
-    public function info($message) {
+    public function logInfo($message) {
         if ($this->level >= self::INFO) {
             $this->write('INFO', $message);
         }
@@ -86,7 +86,7 @@ class Logger extends WireData {
      *
      * @param string $message
      */
-    public function debug($message) {
+    public function logDebug($message) {
         if ($this->level >= self::DEBUG) {
             $this->write('DEBUG', $message);
         }

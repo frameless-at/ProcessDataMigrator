@@ -58,11 +58,11 @@ class ImportProcessor extends WireData {
 
         // Log import start
         if ($this->logger) {
-            $this->logger->info("=== IMPORT START ===");
-            $this->logger->debug("FK Mappings: " . json_encode($fkMappings));
-            $this->logger->debug("Global ID Mapping tables: " . implode(', ', array_keys($globalIdMapping)));
+            $this->logger->logInfo("=== IMPORT START ===");
+            $this->logger->logDebug("FK Mappings: " . json_encode($fkMappings));
+            $this->logger->logDebug("Global ID Mapping tables: " . implode(', ', array_keys($globalIdMapping)));
             foreach ($globalIdMapping as $table => $idMap) {
-                $this->logger->debug("  - {$table}: " . count($idMap) . " entries");
+                $this->logger->logDebug("  - {$table}: " . count($idMap) . " entries");
             }
         }
 
@@ -138,9 +138,9 @@ class ImportProcessor extends WireData {
 
         // Show what we're trying to import
         if ($this->logger) {
-            $this->logger->debug("Processing row with title: $title");
-            $this->logger->debug("Row data columns: " . implode(', ', array_keys($row)));
-            $this->logger->debug("Mapping fields: " . implode(', ', array_keys($mapping['fields'])));
+            $this->logger->logDebug("Processing row with title: $title");
+            $this->logger->logDebug("Row data columns: " . implode(', ', array_keys($row)));
+            $this->logger->logDebug("Mapping fields: " . implode(', ', array_keys($mapping['fields'])));
         }
 
         // Set field values from mapping
@@ -149,47 +149,47 @@ class ImportProcessor extends WireData {
             $fieldtype = $fieldMapping['fieldtype'];
             $sourceColumn = $fieldMapping['source_column']; // CRITICAL: Use actual SQL column name!
 
-            if ($this->logger) $this->logger->debug("Checking field: $sourceColumn -> $targetField ($fieldtype)");
+            if ($this->logger) $this->logger->logDebug("Checking field: $sourceColumn -> $targetField ($fieldtype)");
 
             // Skip if field doesn't exist in template (except in dry-run mode)
             if (!$this->dryRun && $template->fieldgroup && !$template->fieldgroup->hasField($targetField)) {
-                if ($this->logger) $this->logger->debug("  SKIP: Field $targetField not in template");
+                if ($this->logger) $this->logger->logDebug("  SKIP: Field $targetField not in template");
                 continue;
             }
 
             // In dry-run mode, skip field validation since template might be a mock
             if ($this->dryRun) {
-                if ($this->logger) $this->logger->debug("  DRY-RUN: Skipping field existence check for $targetField");
+                if ($this->logger) $this->logger->logDebug("  DRY-RUN: Skipping field existence check for $targetField");
             }
 
             // Skip image/file fields - these need special handling with actual files
             if (in_array($fieldtype, ['FieldtypeImage', 'FieldtypeFile'])) {
-                if ($this->logger) $this->logger->debug("  SKIP: Field $targetField is image/file type");
+                if ($this->logger) $this->logger->logDebug("  SKIP: Field $targetField is image/file type");
                 continue;
             }
 
             // Skip if no data
             if (!isset($row[$sourceColumn])) {
-                if ($this->logger) $this->logger->debug("  SKIP: No data for source column $sourceColumn");
+                if ($this->logger) $this->logger->logDebug("  SKIP: No data for source column $sourceColumn");
                 continue;
             }
 
             $value = $row[$sourceColumn];
-            if ($this->logger) $this->logger->debug("  Value from DB: " . var_export($value, true));
+            if ($this->logger) $this->logger->logDebug("  Value from DB: " . var_export($value, true));
 
             // Convert value based on fieldtype (pass sourceColumn for FK resolution)
             $value = $this->convertValue($value, $fieldMapping, $sourceColumn);
-            if ($this->logger) $this->logger->debug("  Converted value: " . var_export($value, true));
+            if ($this->logger) $this->logger->logDebug("  Converted value: " . var_export($value, true));
 
             // Set field value
             $page->set($targetField, $value);
-            if ($this->logger) $this->logger->debug("  SET: $targetField = " . var_export($value, true));
+            if ($this->logger) $this->logger->logDebug("  SET: $targetField = " . var_export($value, true));
         }
 
         // Save page (unless in dry-run mode)
         if ($this->dryRun) {
             // DRY-RUN: Don't save, just validate and return mock page
-            if ($this->logger) $this->logger->debug("  DRY-RUN: Skipping page save");
+            if ($this->logger) $this->logger->logDebug("  DRY-RUN: Skipping page save");
 
             // Assign temporary ID for dry-run mode (for FK resolution simulation)
             $page->id = 999000 + $this->imported;
@@ -238,22 +238,22 @@ class ImportProcessor extends WireData {
             $sqlId = (int) $value;
 
             if ($this->logger) {
-                $this->logger->debug("    FK CHECK: {$sourceColumn}={$sqlId} maps to table '{$refTable}'");
-                $this->logger->debug("    Available tables in globalIdMapping: " . implode(', ', array_keys($this->globalIdMapping)));
+                $this->logger->logDebug("    FK CHECK: {$sourceColumn}={$sqlId} maps to table '{$refTable}'");
+                $this->logger->logDebug("    Available tables in globalIdMapping: " . implode(', ', array_keys($this->globalIdMapping)));
             }
 
             // Look up PW Page ID in global ID mapping
             if (isset($this->globalIdMapping[$refTable])) {
                 if (isset($this->globalIdMapping[$refTable][$sqlId])) {
                     $pwPageId = $this->globalIdMapping[$refTable][$sqlId];
-                    if ($this->logger) $this->logger->debug("    FK RESOLVED: {$sourceColumn}={$sqlId} → {$refTable} Page #{$pwPageId}");
+                    if ($this->logger) $this->logger->logDebug("    FK RESOLVED: {$sourceColumn}={$sqlId} → {$refTable} Page #{$pwPageId}");
                     return $pwPageId;
                 } else {
-                    if ($this->logger) $this->logger->warning("    FK NOT FOUND: SQL ID {$sqlId} not in {$refTable} mapping (has: " . implode(', ', array_keys($this->globalIdMapping[$refTable])) . ")");
+                    if ($this->logger) $this->logger->logWarning("    FK NOT FOUND: SQL ID {$sqlId} not in {$refTable} mapping (has: " . implode(', ', array_keys($this->globalIdMapping[$refTable])) . ")");
                     return null;
                 }
             } else {
-                if ($this->logger) $this->logger->error("    FK ERROR: Table '{$refTable}' not found in globalIdMapping! Was it imported first?");
+                if ($this->logger) $this->logger->logError("    FK ERROR: Table '{$refTable}' not found in globalIdMapping! Was it imported first?");
                 return null;
             }
         }
