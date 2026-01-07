@@ -442,23 +442,6 @@ class ProcessDatabaseImporter extends Process implements Module {
                 $out .= ' <span class="uk-badge uk-badge-success">Title</span>';
             }
 
-            // FK badge: only for actual foreign keys (from SQL constraints) or *_id pattern (but not is_* or has_*)
-            $isForeignKey = false;
-            if (isset($analysis['foreign_keys'][$column['name']])) {
-                $isForeignKey = true; // Actual FK from SQL
-            } else if ($column['is_likely_foreign_key']) {
-                // Additional check: must end with _id but NOT start with is_ or has_
-                $name = strtolower($column['name']);
-                if (substr($name, -3) === '_id' &&
-                    strpos($name, 'is_') !== 0 &&
-                    strpos($name, 'has_') !== 0) {
-                    $isForeignKey = true;
-                }
-            }
-            if ($isForeignKey) {
-                $out .= ' <span class="uk-badge uk-badge-warning">FK</span>';
-            }
-
             $out .= '</td>';
             $out .= '<td><code>' . $this->sanitizer->entities($column['sql_type']) . '</code></td>';
             $out .= '<td>' . $this->sanitizer->entities($column['detected_type']) . '</td>';

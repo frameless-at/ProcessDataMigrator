@@ -30,16 +30,9 @@ class DataAnalyzer extends WireData {
             'sample_count' => min($sampleSize, count($tableData['data'] ?? [])),
             'columns' => [],
             'primary_key' => $tableData['primary_key'] ?? null,
-            'foreign_keys' => $tableData['foreign_keys'] ?? [],
             'suggested_template' => null,
             'suggested_parent' => '/',
         ];
-
-        // DEBUG: Log table analysis start
-        $this->wire()->log->save('fk-detection', "\n\n========================================");
-        $this->wire()->log->save('fk-detection', "ANALYZING TABLE: {$analysis['table_name']}");
-        $this->wire()->log->save('fk-detection', "Primary Key: " . ($analysis['primary_key'] ?? 'NULL'));
-        $this->wire()->log->save('fk-detection', "========================================");
 
         // Analyze each column
         $structure = $tableData['structure'] ?? [];
@@ -147,17 +140,7 @@ class DataAnalyzer extends WireData {
             $columnInfoWithPK['is_primary_key'] = true;
         }
 
-        // DEBUG
-        $this->wire()->log->save('fk-detection', "\n=== ANALYZING FIELD: $columnName ===");
-        $this->wire()->log->save('fk-detection', "  Is PK check: " . ($isPK ? 'YES' : 'NO'));
-        $this->wire()->log->save('fk-detection', "  Primary Key param: " . ($primaryKey ?? 'NULL'));
-
         $analysis['is_likely_id'] = $this->isLikelyId($columnName, $columnInfoWithPK);
-        $analysis['is_likely_foreign_key'] = $this->isLikelyForeignKey($columnName, $columnInfo, $primaryKey);
-
-        $this->wire()->log->save('fk-detection', "  → is_likely_id: " . ($analysis['is_likely_id'] ? 'true' : 'false'));
-        $this->wire()->log->save('fk-detection', "  → is_likely_foreign_key: " . ($analysis['is_likely_foreign_key'] ? 'true' : 'false'));
-
         $analysis['is_likely_title'] = $this->isLikelyTitle($columnName, $analysis);
         $analysis['is_likely_name'] = $this->isLikelyName($columnName, $analysis);
 
@@ -180,58 +163,6 @@ class DataAnalyzer extends WireData {
         );
     }
 
-    /**
-     * Check if column is likely a foreign key
-     *
-     * @param string $columnName Column name
-     * @param array $columnInfo Column metadata
-     * @param string|null $primaryKey Primary key column name
-     * @return bool True if likely a foreign key
-     */
-    protected function isLikelyForeignKey($columnName, $columnInfo, $primaryKey = null) {
-        $name = strtolower($columnName);
-
-        // DEBUG logging
-        $this->wire()->log->save('fk-detection', "\nChecking column: $columnName");
-        $this->wire()->log->save('fk-detection', "  Primary Key for table: " . ($primaryKey ?? 'NULL'));
-        $this->wire()->log->save('fk-detection', "  base_type: " . ($columnInfo['base_type'] ?? 'NULL'));
-        $this->wire()->log->save('fk-detection', "  type: " . ($columnInfo['type'] ?? 'NULL'));
-        $this->wire()->log->save('fk-detection', "  auto_increment: " . (($columnInfo['auto_increment'] ?? false) ? 'true' : 'false'));
-        $this->wire()->log->save('fk-detection', "  nullable: " . (($columnInfo['nullable'] ?? true) ? 'true' : 'false'));
-
-        // Skip if this is the primary key
-        if ($primaryKey && strtolower($primaryKey) === $name) {
-            $this->wire()->log->save('fk-detection', "  → SKIP: Is primary key");
-            return false;
-        }
-
-        // Skip if auto_increment (definitely a primary key)
-        if ($columnInfo['auto_increment'] ?? false) {
-            $this->wire()->log->save('fk-detection', "  → SKIP: Has auto_increment");
-            return false;
-        }
-
-        // Must be integer type for FK
-        if (!in_array($columnInfo['base_type'] ?? '', ['integer'])) {
-            $this->wire()->log->save('fk-detection', "  → SKIP: Not integer type");
-            return false;
-        }
-
-        // At this point: It's an integer field that is NOT the primary key
-        // Consider it a potential foreign key
-        //
-        // This handles ALL cases:
-        // 1. Traditional naming: user_id, customer_id, id_user
-        // 2. Without suffix: customer, user, parent, author
-        // 3. Exact "id" (in join tables or references)
-        // 4. CamelCase: customerID, userID
-        //
-        // The value-based FK detection will determine the actual relationships
-        // with confidence scores
-
-        $this->wire()->log->save('fk-detection', "  → MARK AS FK");
-        return true;
-    }
 
     /**
      * Check if column is likely a title field
@@ -360,194 +291,4 @@ class DataAnalyzer extends WireData {
         return null; // null means auto-generate
     }
 
-    /**
-     * Analyze relationships between tables
-     */
-    public function analyzeRelationships($tables) {
-        $relationships = [];
-
-        foreach ($tables as $tableName => $tableData) {
-            $foreignKeys = $tableData['foreign_keys'] ?? [];
-
-            foreach ($foreignKeys as $column => $fk) {
-                $relationships[] = [
-                    'source_table' => $tableName,
-                    'source_column' => $column,
-                    'target_table' => $fk['table'],
-                    'target_column' => $fk['column'],
-                    'type' => 'foreign_key',
-                    'cardinality' => 'many_to_one',
-                    'confidence' => 100,
-                ];
-            }
-
-            // Detect implicit foreign keys (columns ending with _id)
-            if (isset($tableData['structure'])) {
-                foreach ($tableData['structure'] as $columnName => $columnInfo) {
-                    if (substr($columnName, -3) === '_id' && $columnName !== 'id') {
-                        // Try to guess the referenced table
-                        $referencedTable = substr($columnName, 0, -3);
-
-                        // Check if that table exists (add 's' for plural)
-                        $possibleTables = [
-                            $referencedTable,
-                            $referencedTable . 's',
-                            $referencedTable . 'es',
-                        ];
-
-                        foreach ($possibleTables as $targetTable) {
-                            if (isset($tables[$targetTable])) {
-                                $relationships[] = [
-                                    'source_table' => $tableName,
-                                    'source_column' => $columnName,
-                                    'target_table' => $targetTable,
-                                    'target_column' => 'id',
-                                    'type' => 'implicit_foreign_key',
-                                    'cardinality' => 'many_to_one',
-                                    'confidence' => 80,
-                                ];
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Add value-based FK detection
-        $valueBased = $this->detectForeignKeysByValue($tables);
-        foreach ($valueBased as $relation) {
-            // Only add if not already detected by other methods
-            $exists = false;
-            foreach ($relationships as $existing) {
-                if ($existing['source_table'] === $relation['source_table'] &&
-                    $existing['source_column'] === $relation['source_column'] &&
-                    $existing['target_table'] === $relation['target_table']) {
-                    $exists = true;
-                    break;
-                }
-            }
-
-            if (!$exists) {
-                $relationships[] = $relation;
-            }
-        }
-
-        return $relationships;
-    }
-
-    /**
-     * Detect foreign keys by comparing actual values between tables
-     *
-     * @param array $tables All parsed tables
-     * @return array Detected relationships
-     */
-    protected function detectForeignKeysByValue($tables) {
-        $relationships = [];
-
-        foreach ($tables as $sourceTableName => $sourceTable) {
-            $sourceStructure = $sourceTable['structure'] ?? [];
-            $sourceData = $sourceTable['data'] ?? [];
-            $sourcePrimaryKey = $sourceTable['primary_key'] ?? null;
-
-            // Skip if no data
-            if (empty($sourceData)) {
-                continue;
-            }
-
-            // Check each integer column in source table
-            foreach ($sourceStructure as $columnName => $columnInfo) {
-                // Skip if not integer type
-                if (!in_array($columnInfo['base_type'] ?? '', ['integer'])) {
-                    continue;
-                }
-
-                // Skip if this is the primary key
-                if ($sourcePrimaryKey && $columnName === $sourcePrimaryKey) {
-                    continue;
-                }
-
-                // Skip if auto_increment
-                if ($columnInfo['auto_increment'] ?? false) {
-                    continue;
-                }
-
-                // Extract unique values from this column
-                $sourceValues = [];
-                foreach ($sourceData as $row) {
-                    $value = $row[$columnName] ?? null;
-                    if ($value !== null && $value !== '' && is_numeric($value)) {
-                        $sourceValues[] = (int)$value;
-                    }
-                }
-
-                if (empty($sourceValues)) {
-                    continue;
-                }
-
-                $uniqueSourceValues = array_unique($sourceValues);
-                $totalSourceValues = count($sourceValues);
-
-                // Compare against all other tables
-                foreach ($tables as $targetTableName => $targetTable) {
-                    // Skip self-references for now (can be enhanced later)
-                    if ($sourceTableName === $targetTableName) {
-                        continue;
-                    }
-
-                    $targetPrimaryKey = $targetTable['primary_key'] ?? null;
-                    $targetData = $targetTable['data'] ?? [];
-
-                    // Skip if no primary key or no data
-                    if (!$targetPrimaryKey || empty($targetData)) {
-                        continue;
-                    }
-
-                    // Extract primary key values from target table
-                    $targetPkValues = [];
-                    foreach ($targetData as $row) {
-                        $value = $row[$targetPrimaryKey] ?? null;
-                        if ($value !== null && $value !== '' && is_numeric($value)) {
-                            $targetPkValues[] = (int)$value;
-                        }
-                    }
-
-                    if (empty($targetPkValues)) {
-                        continue;
-                    }
-
-                    // Calculate match percentage
-                    $matchCount = 0;
-                    foreach ($uniqueSourceValues as $sourceValue) {
-                        if (in_array($sourceValue, $targetPkValues)) {
-                            $matchCount++;
-                        }
-                    }
-
-                    $matchPercentage = (count($uniqueSourceValues) > 0)
-                        ? ($matchCount / count($uniqueSourceValues)) * 100
-                        : 0;
-
-                    // If >50% of values match, consider it a foreign key
-                    if ($matchPercentage >= 50) {
-                        $confidence = round($matchPercentage);
-
-                        $relationships[] = [
-                            'source_table' => $sourceTableName,
-                            'source_column' => $columnName,
-                            'target_table' => $targetTableName,
-                            'target_column' => $targetPrimaryKey,
-                            'type' => 'value_based_foreign_key',
-                            'cardinality' => 'many_to_one',
-                            'confidence' => $confidence,
-                            'matched_values' => $matchCount,
-                            'total_unique_values' => count($uniqueSourceValues),
-                        ];
-                    }
-                }
-            }
-        }
-
-        return $relationships;
-    }
 }

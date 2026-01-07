@@ -124,7 +124,6 @@ class SqlParser extends AbstractParser {
                         'data' => [],
                         'row_count' => 0,
                         'primary_key' => null,
-                        'foreign_keys' => [],
                     ];
                 }
                 continue;
@@ -230,16 +229,6 @@ class SqlParser extends AbstractParser {
                     if (stripos($line, 'PRIMARY KEY') !== false) {
                         if (preg_match('/PRIMARY KEY\s+\(`?([a-zA-Z0-9_]+)`?\)/i', $line, $pkMatches)) {
                             $this->tables[$tableName]['primary_key'] = $pkMatches[1];
-                        }
-                    }
-
-                    // Extract foreign keys
-                    if (stripos($line, 'FOREIGN KEY') !== false) {
-                        if (preg_match('/FOREIGN KEY\s+\(`?([a-zA-Z0-9_]+)`?\)\s+REFERENCES\s+`?([a-zA-Z0-9_]+)`?\s+\(`?([a-zA-Z0-9_]+)`?\)/i', $line, $fkMatches)) {
-                            $this->tables[$tableName]['foreign_keys'][$fkMatches[1]] = [
-                                'table' => $fkMatches[2],
-                                'column' => $fkMatches[3],
-                            ];
                         }
                     }
                     continue;

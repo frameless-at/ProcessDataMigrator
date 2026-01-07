@@ -29,6 +29,44 @@ class TypeDetector extends WireData {
     ];
 
     /**
+     * Column name patterns for type hints
+     */
+    protected $columnNamePatterns = [
+        'email' => ['email', 'e_mail', 'mail'],
+        'url' => ['url', 'link', 'website'],
+        'phone' => ['phone', 'tel', 'telefon', 'mobile', 'handy'],
+        'date' => ['date', 'datum'],
+        'datetime' => ['datetime', 'created_at', 'updated_at', 'modified_at', 'published_at'],
+        'image' => ['image', 'img', 'photo', 'picture', 'foto', 'bild'],
+        'file' => ['file', 'attachment', 'document', 'datei'],
+        'password' => ['password', 'pass', 'pwd', 'passwort'],
+        'checkbox' => ['is_', 'has_', 'active', 'enabled', 'published', 'visible'],
+        'textarea' => ['description', 'body', 'content', 'text', 'beschreibung', 'inhalt'],
+        'title' => ['title', 'headline', 'subject', 'titel'],
+    ];
+
+    /**
+     * Fieldtype mapping for pattern matches
+     */
+    protected $patternFieldtypeMap = [
+        'email' => 'FieldtypeEmail',
+        'url' => 'FieldtypeURL',
+        'phone_de' => 'FieldtypeText',
+        'phone_intl' => 'FieldtypeText',
+        'date_iso' => 'FieldtypeDatetime',
+        'date_de' => 'FieldtypeDatetime',
+        'date_us' => 'FieldtypeDatetime',
+        'datetime_iso' => 'FieldtypeDatetime',
+        'time' => 'FieldtypeDatetime',
+        'html' => 'FieldtypeTextarea',
+        'json' => 'FieldtypeTextarea',
+        'image_url' => 'FieldtypeImage',
+        'file_url' => 'FieldtypeFile',
+        'hex_color' => 'FieldtypeText',
+        'boolean' => 'FieldtypeCheckbox',
+    ];
+
+    /**
      * Detect appropriate ProcessWire field type
      *
      * @param array $values Sample values
@@ -58,25 +96,45 @@ class TypeDetector extends WireData {
             return $booleanResult;
         }
 
-        // Start with SQL type-based detection
+        // Start with SQL type-based detection - this is the most reliable
         $result = $this->detectFromSqlType($baseType, $columnInfo);
 
-        // Refine with pattern matching for string types
-        if (in_array($baseType, ['string', 'text'])) {
-            $patternResult = $this->detectFromPatterns($values);
-            if ($patternResult['confidence'] > $result['confidence']) {
-                $result = $patternResult;
-            }
-        }
+        // CRITICAL: SQL type detection has priority!
+        // Only refine if SQL type detection has LOW confidence (<70%)
+        // This prevents "int" fields from being misdetected as "FieldtypeImage"
+        // just because the column name contains "image"
 
-        // Refine with column name hints
-        $nameResult = $this->detectFromColumnName($columnName);
-        if ($nameResult['confidence'] > 0) {
-            // Combine confidences
-            $result['confidence'] = min(100, $result['confidence'] + $nameResult['confidence'] * 0.3);
-            if ($nameResult['fieldtype'] !== 'FieldtypeText') {
-                $result['fieldtype'] = $nameResult['fieldtype'];
-                $result['type'] = $nameResult['type'];
+        if ($result['confidence'] >= 70) {
+            // SQL type is reliable - only add pattern/name hints, don't override
+            // For string types, check patterns but don't override high-confidence SQL types
+            if (in_array($baseType, ['string', 'text'])) {
+                $patternResult = $this->detectFromPatterns($values);
+                if ($patternResult['confidence'] > $result['confidence']) {
+                    $result = $patternResult;
+                }
+            }
+        } else {
+            // SQL type is uncertain - use patterns and names to refine
+
+            // Refine with pattern matching
+            if (in_array($baseType, ['string', 'text'])) {
+                $patternResult = $this->detectFromPatterns($values);
+                if ($patternResult['confidence'] > $result['confidence']) {
+                    $result = $patternResult;
+                }
+            }
+
+            // Refine with column name hints ONLY if result is still uncertain
+            if ($result['confidence'] < 80) {
+                $nameResult = $this->detectFromColumnName($columnName);
+                if ($nameResult['confidence'] > 0 && $nameResult['fieldtype'] !== 'FieldtypeText') {
+                    // Only apply if name result is more confident
+                    if ($nameResult['confidence'] > $result['confidence']) {
+                        $result['fieldtype'] = $nameResult['fieldtype'];
+                        $result['type'] = $nameResult['type'];
+                        $result['confidence'] = $nameResult['confidence'];
+                    }
+                }
             }
         }
 
@@ -213,28 +271,10 @@ class TypeDetector extends WireData {
         $bestPattern = array_key_first($patternMatches);
         $confidence = $patternMatches[$bestPattern];
 
-        $fieldtypeMap = [
-            'email' => 'FieldtypeEmail',
-            'url' => 'FieldtypeURL',
-            'phone_de' => 'FieldtypeText',
-            'phone_intl' => 'FieldtypeText',
-            'date_iso' => 'FieldtypeDatetime',
-            'date_de' => 'FieldtypeDatetime',
-            'date_us' => 'FieldtypeDatetime',
-            'datetime_iso' => 'FieldtypeDatetime',
-            'time' => 'FieldtypeDatetime',
-            'html' => 'FieldtypeTextarea',
-            'json' => 'FieldtypeTextarea',
-            'image_url' => 'FieldtypeImage',
-            'file_url' => 'FieldtypeFile',
-            'hex_color' => 'FieldtypeText',
-            'boolean' => 'FieldtypeCheckbox',
-        ];
-
         return [
             'type' => $bestPattern,
             'confidence' => round($confidence),
-            'fieldtype' => $fieldtypeMap[$bestPattern] ?? 'FieldtypeText',
+            'fieldtype' => $this->patternFieldtypeMap[$bestPattern] ?? 'FieldtypeText',
             'patterns' => array_keys($patternMatches)
         ];
     }
@@ -245,21 +285,7 @@ class TypeDetector extends WireData {
     protected function detectFromColumnName($columnName) {
         $name = strtolower($columnName);
 
-        $namePatterns = [
-            'email' => ['email', 'e_mail', 'mail'],
-            'url' => ['url', 'link', 'website'],
-            'phone' => ['phone', 'tel', 'telefon', 'mobile', 'handy'],
-            'date' => ['date', 'datum'],
-            'datetime' => ['datetime', 'created_at', 'updated_at', 'modified_at', 'published_at'],
-            'image' => ['image', 'img', 'photo', 'picture', 'foto', 'bild'],
-            'file' => ['file', 'attachment', 'document', 'datei'],
-            'password' => ['password', 'pass', 'pwd', 'passwort'],
-            'checkbox' => ['is_', 'has_', 'active', 'enabled', 'published', 'visible'],
-            'textarea' => ['description', 'body', 'content', 'text', 'beschreibung', 'inhalt'],
-            'title' => ['title', 'headline', 'subject', 'titel'],
-        ];
-
-        foreach ($namePatterns as $type => $patterns) {
+        foreach ($this->columnNamePatterns as $type => $patterns) {
             foreach ($patterns as $pattern) {
                 if (strpos($name, $pattern) !== false) {
                     $fieldtypeMap = [

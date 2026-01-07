@@ -55,15 +55,6 @@ class MappingEngine extends WireData {
                 $fieldMapping['options'] = $column['options'];
             }
 
-            // Foreign key handling
-            if (isset($analysis['foreign_keys'][$columnName])) {
-                $fk = $analysis['foreign_keys'][$columnName];
-                $fieldMapping['is_foreign_key'] = true;
-                $fieldMapping['reference_table'] = $fk['table'];
-                $fieldMapping['reference_column'] = $fk['column'];
-                $fieldMapping['fieldtype'] = 'FieldtypePage';
-            }
-
             $mapping['fields'][$columnName] = $fieldMapping;
         }
 
@@ -178,17 +169,12 @@ class MappingEngine extends WireData {
         $fieldCount = count($mapping['fields']);
         $requiredFields = 0;
         $optionalFields = 0;
-        $foreignKeys = 0;
 
         foreach ($mapping['fields'] as $field) {
             if ($field['required']) {
                 $requiredFields++;
             } else {
                 $optionalFields++;
-            }
-
-            if (isset($field['is_foreign_key']) && $field['is_foreign_key']) {
-                $foreignKeys++;
             }
         }
 
@@ -199,7 +185,6 @@ class MappingEngine extends WireData {
             'field_count' => $fieldCount,
             'required_fields' => $requiredFields,
             'optional_fields' => $optionalFields,
-            'foreign_keys' => $foreignKeys,
         ];
     }
 }
