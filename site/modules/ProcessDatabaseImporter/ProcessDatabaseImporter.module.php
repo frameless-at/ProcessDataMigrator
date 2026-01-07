@@ -768,6 +768,7 @@ class ProcessDatabaseImporter extends Process implements Module {
 
     /**
      * Sort tables by FK dependencies using topological sort
+     * Throws exception if circular dependencies are detected
      */
     protected function sortTablesByDependencies($tables, $fkMappings) {
         if (empty($fkMappings)) {
@@ -777,6 +778,7 @@ class ProcessDatabaseImporter extends Process implements Module {
         $dependencies = [];
         $sorted = [];
         $visited = [];
+        $processing = []; // Track currently processing nodes for cycle detection
 
         // Build dependency graph
         foreach ($tables as $table) {
@@ -790,16 +792,43 @@ class ProcessDatabaseImporter extends Process implements Module {
             }
         }
 
-        // Topological sort using DFS
-        $visit = function($table) use (&$visit, &$visited, &$sorted, $dependencies) {
+        // CYCLE DETECTION: Check for circular dependencies before sorting
+        $cycle = $this->detectCycle($dependencies);
+        if ($cycle !== null) {
+            $cycleStr = implode(' → ', $cycle) . ' → ' . $cycle[0];
+            throw new \Exception(sprintf(
+                $this->_('Circular Foreign Key dependency detected: %s. Please remove one of the FK mappings to break the cycle.'),
+                $cycleStr
+            ));
+        }
+
+        // Topological sort using DFS with cycle detection
+        $visit = function($table, $path = []) use (&$visit, &$visited, &$processing, &$sorted, $dependencies) {
             if (isset($visited[$table])) {
                 return;
             }
-            $visited[$table] = true;
+
+            // Cycle detection: if currently processing, we found a cycle
+            if (isset($processing[$table])) {
+                $path[] = $table;
+                $cycleStart = array_search($table, $path);
+                $cycle = array_slice($path, $cycleStart);
+                $cycleStr = implode(' → ', $cycle) . ' → ' . $table;
+                throw new \Exception(sprintf(
+                    'Circular dependency detected during sort: %s',
+                    $cycleStr
+                ));
+            }
+
+            $processing[$table] = true;
+            $path[] = $table;
 
             foreach ($dependencies[$table] as $dep) {
-                $visit($dep);
+                $visit($dep, $path);
             }
+
+            unset($processing[$table]);
+            $visited[$table] = true;
 
             // Append (not prepend) to get correct dependency order
             $sorted[] = $table;
@@ -810,6 +839,53 @@ class ProcessDatabaseImporter extends Process implements Module {
         }
 
         return $sorted;
+    }
+
+    /**
+     * Detect circular dependencies in dependency graph
+     * Returns array of nodes in cycle, or null if no cycle found
+     */
+    protected function detectCycle($dependencies) {
+        $visited = [];
+        $recursionStack = [];
+
+        foreach (array_keys($dependencies) as $node) {
+            if (!isset($visited[$node])) {
+                $cycle = $this->detectCycleDFS($node, $dependencies, $visited, $recursionStack, []);
+                if ($cycle !== null) {
+                    return $cycle;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * DFS helper for cycle detection
+     */
+    protected function detectCycleDFS($node, $dependencies, &$visited, &$recursionStack, $path) {
+        $visited[$node] = true;
+        $recursionStack[$node] = true;
+        $path[] = $node;
+
+        if (isset($dependencies[$node])) {
+            foreach ($dependencies[$node] as $neighbor) {
+                if (!isset($visited[$neighbor])) {
+                    $cycle = $this->detectCycleDFS($neighbor, $dependencies, $visited, $recursionStack, $path);
+                    if ($cycle !== null) {
+                        return $cycle;
+                    }
+                } elseif (isset($recursionStack[$neighbor])) {
+                    // Found a cycle - extract it from path
+                    $cycleStart = array_search($neighbor, $path);
+                    return array_slice($path, $cycleStart);
+                }
+            }
+        }
+
+        unset($recursionStack[$node]);
+        return null;
     }
 
     /**
