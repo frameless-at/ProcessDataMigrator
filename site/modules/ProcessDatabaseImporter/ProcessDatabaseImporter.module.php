@@ -622,7 +622,8 @@ class ProcessDatabaseImporter extends Process implements Module {
                 $visit($dep);
             }
 
-            array_unshift($sorted, $table);
+            // Append (not prepend) to get correct dependency order
+            $sorted[] = $table;
         };
 
         foreach ($tables as $table) {
@@ -662,13 +663,24 @@ class ProcessDatabaseImporter extends Process implements Module {
             $this->session->redirect($this->page->url);
         }
 
+        $this->message($this->_("Selected tables for import: " . implode(', ', $selectedTables)));
+
         // Get FK mappings
         $fkMappings = $sessionData['fk_mappings'] ?? [];
+
+        if (!empty($fkMappings)) {
+            $this->message($this->_("FK Mappings configured:"));
+            foreach ($fkMappings as $table => $columns) {
+                foreach ($columns as $col => $refTable) {
+                    $this->message($this->_("  - {$table}.{$col} → {$refTable}"));
+                }
+            }
+        }
 
         // Sort tables by dependencies (referenced tables must be imported first)
         if (!empty($fkMappings)) {
             $sortedTables = $this->sortTablesByDependencies($selectedTables, $fkMappings);
-            $this->message($this->_('Tables sorted by dependencies.'));
+            $this->message($this->_('Tables sorted by dependencies: ' . implode(' → ', $sortedTables)));
             $selectedTables = $sortedTables;
         }
 
