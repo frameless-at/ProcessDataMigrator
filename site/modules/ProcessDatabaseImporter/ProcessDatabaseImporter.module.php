@@ -399,8 +399,11 @@ class ProcessDatabaseImporter extends Process implements Module {
     protected function buildFieldtypeSelector($tableName, $columnName, $suggested) {
         $fieldtypes = $this->getAvailableFieldtypes();
 
-        $out = '<select name="fieldtypes[' . $this->sanitizer->entities($tableName) . '][' . $this->sanitizer->entities($columnName) . ']" ';
-        $out .= 'class="uk-select" style="font-size: 12px; padding: 2px 4px;">';
+        // CRITICAL: Don't escape the square brackets in the name attribute!
+        // entities() would convert [ to &#91; which breaks POST array structure
+        $safeName = 'fieldtypes[' . $this->sanitizer->name($tableName) . '][' . $this->sanitizer->name($columnName) . ']';
+
+        $out = '<select name="' . $safeName . '" class="uk-select" style="font-size: 12px; padding: 2px 4px;">';
 
         foreach ($fieldtypes as $type => $label) {
             $selected = ($type === $suggested) ? ' selected' : '';
