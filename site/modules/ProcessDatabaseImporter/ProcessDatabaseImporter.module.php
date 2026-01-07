@@ -624,6 +624,32 @@ class ProcessDatabaseImporter extends Process implements Module {
                             $mapping['fields'][$columnName]['fieldtype'] = $newType;
                             $overrideCount++;
                             $this->message($this->_("Override: {$columnName} changed from {$oldType} to {$newType}"));
+
+                            // CRITICAL: If changed to FieldtypeOptions, copy options from analysis
+                            if ($newType === 'FieldtypeOptions') {
+                                $columnData = $analysis['columns'][$columnName] ?? null;
+                                if ($columnData && isset($columnData['options'])) {
+                                    $mapping['fields'][$columnName]['options'] = $columnData['options'];
+                                    $optionCount = count($columnData['options']);
+                                    $this->message($this->_("  → Added {$optionCount} option(s): " . implode(', ', array_slice($columnData['options'], 0, 5)) . (count($columnData['options']) > 5 ? '...' : '')));
+                                } else {
+                                    // No options available - extract unique values from data
+                                    $values = [];
+                                    foreach ($tableData['data'] as $row) {
+                                        if (isset($row[$columnName]) && $row[$columnName] !== null && $row[$columnName] !== '') {
+                                            $values[] = $row[$columnName];
+                                        }
+                                    }
+                                    $uniqueValues = array_values(array_unique($values));
+                                    if (!empty($uniqueValues)) {
+                                        $mapping['fields'][$columnName]['options'] = $uniqueValues;
+                                        $uniqueCount = count($uniqueValues);
+                                        $this->message($this->_("  → Extracted {$uniqueCount} unique values as options"));
+                                    } else {
+                                        $this->warning($this->_("  → No options available for {$columnName} - field will be created without selectable options"));
+                                    }
+                                }
+                            }
                         }
                     }
                     if ($overrideCount > 0) {
