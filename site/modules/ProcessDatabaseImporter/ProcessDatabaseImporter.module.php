@@ -522,7 +522,6 @@ class ProcessDatabaseImporter extends Process implements Module {
 
             // Add FK dropdown inline for potential FK fields (integer fields, not ID)
             if ($isPotentialFk) {
-                $out .= '<span style="color: #999;">│</span>';
                 $out .= '<span style="color: #666; font-size: 11px;">FK:</span>';
                 $out .= '<select name="fk_table[' . $this->sanitizer->name($tableName) . '][' . $this->sanitizer->name($columnName) . ']" ';
                 $out .= 'class="uk-select" style="font-size: 12px; padding: 2px 6px; width: auto; min-width: 100px;">';
@@ -553,12 +552,6 @@ class ProcessDatabaseImporter extends Process implements Module {
 
         $out .= '</tbody>';
         $out .= '</table>';
-
-        // Info about special fieldtypes
-        $out .= '<div class="uk-alert uk-alert-primary" style="margin-top: 10px; font-size: 11px;">';
-        $out .= '<strong>Note:</strong> ';
-        $out .= 'Image/File fields will be created but file data cannot be imported from SQL.';
-        $out .= '</div>';
 
         $out .= '</div>';
 
