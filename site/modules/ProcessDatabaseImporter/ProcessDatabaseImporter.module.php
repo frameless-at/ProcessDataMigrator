@@ -72,6 +72,10 @@ class ProcessDatabaseImporter extends Process implements Module {
         // Load CSS
         $cssUrl = $this->config->urls->siteModules . 'ProcessDatabaseImporter/assets/css/database-importer.css';
         $this->config->styles->add($cssUrl);
+
+        // Load JavaScript for smart checkbox logic
+        $jsUrl = $this->config->urls->siteModules . 'ProcessDatabaseImporter/assets/js/table-field-checkboxes.js';
+        $this->config->scripts->add($jsUrl);
     }
 
     /**
