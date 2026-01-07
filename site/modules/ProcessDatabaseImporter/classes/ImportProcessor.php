@@ -36,6 +36,14 @@ class ImportProcessor extends WireData {
 
         $titleField = $mapping['title_field'];
 
+        // DEBUG: Log FK mappings and global ID mapping
+        $this->wire()->log->save('db-importer', "=== IMPORT START ===");
+        $this->wire()->log->save('db-importer', "FK Mappings: " . json_encode($fkMappings));
+        $this->wire()->log->save('db-importer', "Global ID Mapping tables: " . implode(', ', array_keys($globalIdMapping)));
+        foreach ($globalIdMapping as $table => $mapping) {
+            $this->wire()->log->save('db-importer', "  - {$table}: " . count($mapping) . " entries");
+        }
+
         foreach ($data as $index => $row) {
             try {
                 $page = $this->createPage($row, $mapping, $template, $parent, $titleField);
@@ -190,13 +198,21 @@ class ImportProcessor extends WireData {
             $refTable = $this->fkMappings[$sourceColumn];
             $sqlId = (int) $value;
 
+            $this->wire()->log->save('db-importer', "    FK CHECK: {$sourceColumn}={$sqlId} maps to table '{$refTable}'");
+            $this->wire()->log->save('db-importer', "    Available tables in globalIdMapping: " . implode(', ', array_keys($this->globalIdMapping)));
+
             // Look up PW Page ID in global ID mapping
-            if (isset($this->globalIdMapping[$refTable][$sqlId])) {
-                $pwPageId = $this->globalIdMapping[$refTable][$sqlId];
-                $this->wire()->log->save('db-importer', "    FK RESOLVED: {$sourceColumn}={$sqlId} → {$refTable} Page #{$pwPageId}");
-                return $pwPageId;
+            if (isset($this->globalIdMapping[$refTable])) {
+                if (isset($this->globalIdMapping[$refTable][$sqlId])) {
+                    $pwPageId = $this->globalIdMapping[$refTable][$sqlId];
+                    $this->wire()->log->save('db-importer', "    FK RESOLVED: {$sourceColumn}={$sqlId} → {$refTable} Page #{$pwPageId}");
+                    return $pwPageId;
+                } else {
+                    $this->wire()->log->save('db-importer', "    FK NOT FOUND: SQL ID {$sqlId} not in {$refTable} mapping (has: " . implode(', ', array_keys($this->globalIdMapping[$refTable])) . ")");
+                    return null;
+                }
             } else {
-                $this->wire()->log->save('db-importer', "    FK NOT FOUND: {$sourceColumn}={$sqlId} → {$refTable} (no mapping)");
+                $this->wire()->log->save('db-importer', "    FK ERROR: Table '{$refTable}' not found in globalIdMapping! Was it imported first?");
                 return null;
             }
         }
