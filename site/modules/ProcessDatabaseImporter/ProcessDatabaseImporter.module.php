@@ -20,7 +20,7 @@ require_once(__DIR__ . '/classes/ImportRollback.php');
  * @author ProcessWire
  * @version 1.0.0
  */
-class ProcessDatabaseImporter extends Process implements Module {
+class ProcessDatabaseImporter extends Process implements Module, ConfigurableModule {
 
     /**
      * Module information
