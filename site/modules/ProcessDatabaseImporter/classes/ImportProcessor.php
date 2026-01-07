@@ -40,8 +40,8 @@ class ImportProcessor extends WireData {
         $this->wire()->log->save('db-importer', "=== IMPORT START ===");
         $this->wire()->log->save('db-importer', "FK Mappings: " . json_encode($fkMappings));
         $this->wire()->log->save('db-importer', "Global ID Mapping tables: " . implode(', ', array_keys($globalIdMapping)));
-        foreach ($globalIdMapping as $table => $mapping) {
-            $this->wire()->log->save('db-importer', "  - {$table}: " . count($mapping) . " entries");
+        foreach ($globalIdMapping as $table => $idMap) {
+            $this->wire()->log->save('db-importer', "  - {$table}: " . count($idMap) . " entries");
         }
 
         foreach ($data as $index => $row) {
