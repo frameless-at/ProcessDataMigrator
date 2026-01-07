@@ -940,9 +940,16 @@ class ProcessDatabaseImporter extends Process implements Module {
 
         // Sort tables by dependencies (referenced tables must be imported first)
         if (!empty($fkMappings)) {
-            $sortedTables = $this->sortTablesByDependencies($selectedTables, $fkMappings);
-            $this->message($this->_('Tables sorted by dependencies: ' . implode(' → ', $sortedTables)));
-            $selectedTables = $sortedTables;
+            try {
+                $sortedTables = $this->sortTablesByDependencies($selectedTables, $fkMappings);
+                $this->message($this->_('Tables sorted by dependencies: ' . implode(' → ', $sortedTables)));
+                $selectedTables = $sortedTables;
+            } catch (\Exception $e) {
+                // Circular FK dependency detected - show error and return to analysis view
+                $this->error($e->getMessage());
+                $this->error($this->_('Please uncheck one of the FK dropdowns in the cycle to break the circular dependency, then try importing again.'));
+                return $this->executeAnalyze();
+            }
         }
 
         // Import each selected table
