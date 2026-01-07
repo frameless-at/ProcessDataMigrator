@@ -107,6 +107,23 @@ class ProcessDatabaseImporter extends Process implements Module {
                 if ($fieldtypeOverrides && is_array($fieldtypeOverrides)) {
                     $sessionData['fieldtype_overrides'] = $fieldtypeOverrides;
                 }
+
+                // Store FK table mappings
+                $fkTables = isset($_POST['fk_table']) ? $_POST['fk_table'] : null;
+                if ($fkTables && is_array($fkTables)) {
+                    $fkMappings = [];
+                    foreach ($fkTables as $tableName => $columns) {
+                        foreach ($columns as $columnName => $refTable) {
+                            if (!empty($refTable)) {
+                                $fkMappings[$tableName][$columnName] = $refTable;
+                            }
+                        }
+                    }
+                    if (!empty($fkMappings)) {
+                        $sessionData['fk_mappings'] = $fkMappings;
+                    }
+                }
+
                 $this->session->set(self::SESSION_KEY, $sessionData);
                 return $this->executeImport();
             }
@@ -456,6 +473,7 @@ class ProcessDatabaseImporter extends Process implements Module {
         $out .= '<th>' . $this->_('SQL Type') . '</th>';
         $out .= '<th>' . $this->_('Detected Type') . '</th>';
         $out .= '<th>' . $this->_('Suggested Fieldtype') . '</th>';
+        $out .= '<th style="width: 120px;">FK → Table</th>';
         $out .= '<th>' . $this->_('Confidence') . '</th>';
         $out .= '<th>' . $this->_('Sample Values') . '</th>';
         $out .= '</tr>';
@@ -466,6 +484,13 @@ class ProcessDatabaseImporter extends Process implements Module {
             $columnName = $column['name'];
             $isIdField = $column['is_likely_id'];
             $isTitleField = ($columnName === $analysis['suggested_title_field']);
+
+            // Determine if this could be a FK field (integer with "id" in name)
+            $isPotentialFk = (
+                in_array($column['detected_type'], ['integer', 'int']) &&
+                stripos($columnName, 'id') !== false &&
+                !$isIdField // Not the main ID field
+            );
 
             // Checkbox: checked by default, except for ID fields
             $checked = !$isIdField ? ' checked' : '';
@@ -493,6 +518,21 @@ class ProcessDatabaseImporter extends Process implements Module {
             $out .= '<td><code>' . $this->sanitizer->entities($column['sql_type']) . '</code></td>';
             $out .= '<td>' . $this->sanitizer->entities($column['detected_type']) . '</td>';
             $out .= '<td>' . $this->buildFieldtypeSelector($tableName, $columnName, $column['suggested_fieldtype']) . '</td>';
+
+            // FK Table selection - only for potential FK fields
+            if ($isPotentialFk) {
+                $out .= '<td>';
+                $out .= '<select name="fk_table[' . $this->sanitizer->name($tableName) . '][' . $this->sanitizer->name($columnName) . ']" ';
+                $out .= 'class="uk-select" style="font-size: 11px; padding: 2px 4px;">';
+                $out .= '<option value="">--</option>';
+                foreach ($allTableNames as $tbl) {
+                    $out .= '<option value="' . $this->sanitizer->entities($tbl) . '">' . $this->sanitizer->entities($tbl) . '</option>';
+                }
+                $out .= '</select>';
+                $out .= '</td>';
+            } else {
+                $out .= '<td style="background: #f5f5f5;"></td>';
+            }
 
             // Confidence with color
             $confidence = $column['detection_confidence'];
@@ -548,6 +588,51 @@ class ProcessDatabaseImporter extends Process implements Module {
     }
 
     /**
+     * Sort tables by FK dependencies using topological sort
+     */
+    protected function sortTablesByDependencies($tables, $fkMappings) {
+        if (empty($fkMappings)) {
+            return $tables;
+        }
+
+        $dependencies = [];
+        $sorted = [];
+        $visited = [];
+
+        // Build dependency graph
+        foreach ($tables as $table) {
+            $dependencies[$table] = [];
+            if (isset($fkMappings[$table])) {
+                foreach ($fkMappings[$table] as $column => $refTable) {
+                    if (in_array($refTable, $tables) && $refTable !== $table) {
+                        $dependencies[$table][] = $refTable;
+                    }
+                }
+            }
+        }
+
+        // Topological sort using DFS
+        $visit = function($table) use (&$visit, &$visited, &$sorted, $dependencies) {
+            if (isset($visited[$table])) {
+                return;
+            }
+            $visited[$table] = true;
+
+            foreach ($dependencies[$table] as $dep) {
+                $visit($dep);
+            }
+
+            array_unshift($sorted, $table);
+        };
+
+        foreach ($tables as $table) {
+            $visit($table);
+        }
+
+        return $sorted;
+    }
+
+    /**
      * Execute import process
      */
     protected function executeImport() {
@@ -577,10 +662,21 @@ class ProcessDatabaseImporter extends Process implements Module {
             $this->session->redirect($this->page->url);
         }
 
+        // Get FK mappings
+        $fkMappings = $sessionData['fk_mappings'] ?? [];
+
+        // Sort tables by dependencies (referenced tables must be imported first)
+        if (!empty($fkMappings)) {
+            $sortedTables = $this->sortTablesByDependencies($selectedTables, $fkMappings);
+            $this->message($this->_('Tables sorted by dependencies.'));
+            $selectedTables = $sortedTables;
+        }
+
         // Import each selected table
         $allRollbackData = [];
         $totalImported = 0;
         $maxRows = $sessionData['max_rows'] ?? 0;
+        $idMapping = []; // Maps: table => [sql_id => pw_page_id]
 
         try {
             foreach ($selectedTables as $tableName) {
@@ -680,7 +776,16 @@ class ProcessDatabaseImporter extends Process implements Module {
                 }
 
                 $importProcessor = $this->wire(new ImportProcessor());
-                $result = $importProcessor->import($importData, $mapping, $template, $parent);
+
+                // Pass FK mappings and ID mapping for this table
+                $tableFkMappings = isset($fkMappings[$tableName]) ? $fkMappings[$tableName] : [];
+                $result = $importProcessor->import($importData, $mapping, $template, $parent, $tableFkMappings, $idMapping);
+
+                // Update ID mapping with newly created pages
+                if (isset($result['id_mapping'])) {
+                    $idMapping[$tableName] = $result['id_mapping'];
+                    $this->message($this->_("  → Stored ID mapping for {$tableName}: " . count($result['id_mapping']) . " entries"));
+                }
 
                 $totalImported += $result['imported'];
 

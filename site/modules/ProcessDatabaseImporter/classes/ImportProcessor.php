@@ -11,6 +11,9 @@ class ImportProcessor extends WireData {
     protected $imported = 0;
     protected $errors = [];
     protected $createdPages = [];
+    protected $fkMappings = [];
+    protected $globalIdMapping = [];
+    protected $localIdMapping = [];
 
     /**
      * Import data and create pages
@@ -19,12 +22,17 @@ class ImportProcessor extends WireData {
      * @param array $mapping Mapping configuration
      * @param Template $template Target template
      * @param Page $parent Parent page
+     * @param array $fkMappings FK mappings for this table [column => refTable]
+     * @param array $globalIdMapping Global ID mapping from previous tables [table => [sql_id => pw_id]]
      * @return array Import result
      */
-    public function import($data, $mapping, $template, $parent) {
+    public function import($data, $mapping, $template, $parent, $fkMappings = [], $globalIdMapping = []) {
         $this->imported = 0;
         $this->errors = [];
         $this->createdPages = [];
+        $this->fkMappings = $fkMappings;
+        $this->globalIdMapping = $globalIdMapping;
+        $this->localIdMapping = [];
 
         $titleField = $mapping['title_field'];
 
@@ -39,6 +47,11 @@ class ImportProcessor extends WireData {
                         'path' => $page->path,
                         'title' => $page->title,
                     ];
+
+                    // Store SQL ID → PW Page ID mapping
+                    if (isset($row['id'])) {
+                        $this->localIdMapping[(int)$row['id']] = $page->id;
+                    }
                 }
             } catch (\Exception $e) {
                 $this->errors[] = [
@@ -54,6 +67,7 @@ class ImportProcessor extends WireData {
             'imported' => $this->imported,
             'errors' => $this->errors,
             'created_pages' => $this->createdPages,
+            'id_mapping' => $this->localIdMapping,
         ];
     }
 
@@ -125,8 +139,8 @@ class ImportProcessor extends WireData {
             $value = $row[$sourceColumn];
             $this->wire()->log->save('db-importer', "  Value from DB: " . var_export($value, true));
 
-            // Convert value based on fieldtype
-            $value = $this->convertValue($value, $fieldMapping);
+            // Convert value based on fieldtype (pass sourceColumn for FK resolution)
+            $value = $this->convertValue($value, $fieldMapping, $sourceColumn);
             $this->wire()->log->save('db-importer', "  Converted value: " . var_export($value, true));
 
             // Set field value
@@ -160,14 +174,31 @@ class ImportProcessor extends WireData {
      *
      * @param mixed $value Raw value
      * @param array $fieldMapping Field mapping configuration
+     * @param string $sourceColumn Source column name (for FK resolution)
      * @return mixed Converted value
      */
-    protected function convertValue($value, $fieldMapping) {
+    protected function convertValue($value, $fieldMapping, $sourceColumn) {
         if ($value === null) {
             return null;
         }
 
         $fieldtype = $fieldMapping['fieldtype'];
+
+        // Check if this column has an FK mapping
+        if (isset($this->fkMappings[$sourceColumn])) {
+            $refTable = $this->fkMappings[$sourceColumn];
+            $sqlId = (int) $value;
+
+            // Look up PW Page ID in global ID mapping
+            if (isset($this->globalIdMapping[$refTable][$sqlId])) {
+                $pwPageId = $this->globalIdMapping[$refTable][$sqlId];
+                $this->wire()->log->save('db-importer', "    FK RESOLVED: {$sourceColumn}={$sqlId} → {$refTable} Page #{$pwPageId}");
+                return $pwPageId;
+            } else {
+                $this->wire()->log->save('db-importer', "    FK NOT FOUND: {$sourceColumn}={$sqlId} → {$refTable} (no mapping)");
+                return null;
+            }
+        }
 
         switch ($fieldtype) {
             case 'FieldtypeInteger':
@@ -194,8 +225,7 @@ class ImportProcessor extends WireData {
                 return $value;
 
             case 'FieldtypePage':
-                // Page references cannot be imported from SQL data
-                // These fields will remain empty and need manual configuration
+                // Page references without FK mapping remain empty
                 return null;
 
             case 'FieldtypeText':
