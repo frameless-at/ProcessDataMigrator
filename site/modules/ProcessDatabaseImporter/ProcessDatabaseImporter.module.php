@@ -971,7 +971,7 @@ class ProcessDatabaseImporter extends Process implements Module {
                 $this->error($this->_('Please uncheck one of the FK dropdowns in the cycle to break the circular dependency, then try importing again.'));
 
                 // Return analysis view with preserved session data
-                return $this->___executeAnalyze();
+                return $this->executeAnalyze();
             }
         }
 
