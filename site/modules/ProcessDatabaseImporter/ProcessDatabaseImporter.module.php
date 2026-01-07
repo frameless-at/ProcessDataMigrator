@@ -485,10 +485,10 @@ class ProcessDatabaseImporter extends Process implements Module {
             $isIdField = $column['is_likely_id'];
             $isTitleField = ($columnName === $analysis['suggested_title_field']);
 
-            // Determine if this could be a FK field (integer with "id" in name)
+            // Show FK dropdown for all integer fields (except main ID field)
+            // User decides which fields are actually foreign keys
             $isPotentialFk = (
                 in_array($column['detected_type'], ['integer', 'int']) &&
-                stripos($columnName, 'id') !== false &&
                 !$isIdField // Not the main ID field
             );
 
