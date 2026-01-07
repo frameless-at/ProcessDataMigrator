@@ -516,20 +516,23 @@ class ProcessDatabaseImporter extends Process implements Module {
             $out .= '<td>' . $this->sanitizer->entities($column['detected_type']) . '</td>';
 
             // Fieldtype + FK combined in one cell
-            $out .= '<td>';
+            $out .= '<td style="white-space: nowrap;">';
+            $out .= '<div style="display: flex; align-items: center; gap: 8px;">';
             $out .= $this->buildFieldtypeSelector($tableName, $columnName, $column['suggested_fieldtype']);
 
             // Add FK dropdown inline for potential FK fields (integer fields, not ID)
             if ($isPotentialFk) {
-                $out .= ' <span style="color: #999;">│</span> FK: ';
+                $out .= '<span style="color: #999;">│</span>';
+                $out .= '<span style="color: #666; font-size: 11px;">FK:</span>';
                 $out .= '<select name="fk_table[' . $this->sanitizer->name($tableName) . '][' . $this->sanitizer->name($columnName) . ']" ';
-                $out .= 'class="uk-select" style="display: inline-block; width: auto; font-size: 12px; padding: 2px 6px;">';
+                $out .= 'class="uk-select" style="font-size: 12px; padding: 2px 6px; width: auto; min-width: 100px;">';
                 $out .= '<option value="">--</option>';
                 foreach ($allTableNames as $tbl) {
                     $out .= '<option value="' . $this->sanitizer->entities($tbl) . '">' . $this->sanitizer->entities($tbl) . '</option>';
                 }
                 $out .= '</select>';
             }
+            $out .= '</div>';
             $out .= '</td>';
 
             // Confidence with color
