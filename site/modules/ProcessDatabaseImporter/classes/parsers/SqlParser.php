@@ -62,6 +62,28 @@ class SqlParser extends AbstractParser {
             return [];
         }
 
+        // MEMORY MANAGEMENT: Check file size and available memory
+        $fileSize = filesize($file);
+        $memoryLimit = $this->getMemoryLimit();
+        $memoryUsage = memory_get_usage(true);
+        $availableMemory = $memoryLimit - $memoryUsage;
+
+        wire()->log->save('db-importer', sprintf(
+            'Memory Check: File=%s, MemLimit=%s, Used=%s, Available=%s',
+            $this->formatBytes($fileSize),
+            $this->formatBytes($memoryLimit),
+            $this->formatBytes($memoryUsage),
+            $this->formatBytes($availableMemory)
+        ));
+
+        // Warn if file size exceeds 50% of available memory
+        if ($fileSize > ($availableMemory * 0.5)) {
+            wire()->warning(sprintf(
+                'Large file detected (%s). This may require significant memory. Consider using a smaller sample_size.',
+                $this->formatBytes($fileSize)
+            ));
+        }
+
         $tableFilter = $options['table_filter'] ?? [];
         $maxRows = $options['max_rows'] ?? 0;
         $sampleSize = $options['sample_size'] ?? 100;
@@ -452,6 +474,29 @@ class SqlParser extends AbstractParser {
             return;
         }
 
+        // MEMORY MANAGEMENT: Periodic memory check
+        static $rowCounter = 0;
+        $rowCounter++;
+
+        if ($rowCounter % 100 === 0) {
+            $memoryUsage = memory_get_usage(true);
+            $memoryLimit = $this->getMemoryLimit();
+            $memoryPercent = ($memoryUsage / $memoryLimit) * 100;
+
+            if ($memoryPercent > 80) {
+                wire()->warning(sprintf(
+                    'High memory usage: %s of %s (%.1f%%). Consider reducing sample_size.',
+                    $this->formatBytes($memoryUsage),
+                    $this->formatBytes($memoryLimit),
+                    $memoryPercent
+                ));
+            }
+
+            // Clear statement cache to free memory
+            unset($sql);
+            gc_collect_cycles();
+        }
+
         // Parse INSERT statement
         $rows = $this->parseInsertStatement($sql, $tableName);
 
@@ -694,6 +739,48 @@ class SqlParser extends AbstractParser {
         // Note: Unescaping is now handled during parsing, not here
 
         return $value;
+    }
+
+    /**
+     * Get PHP memory limit in bytes
+     */
+    protected function getMemoryLimit() {
+        $memoryLimit = ini_get('memory_limit');
+
+        if ($memoryLimit == -1) {
+            // Unlimited
+            return PHP_INT_MAX;
+        }
+
+        // Convert to bytes
+        $unit = strtoupper(substr($memoryLimit, -1));
+        $value = (int) substr($memoryLimit, 0, -1);
+
+        switch ($unit) {
+            case 'G':
+                $value *= 1024;
+                // fall through
+            case 'M':
+                $value *= 1024;
+                // fall through
+            case 'K':
+                $value *= 1024;
+        }
+
+        return $value;
+    }
+
+    /**
+     * Format bytes to human-readable string
+     */
+    protected function formatBytes($bytes) {
+        $units = ['B', 'KB', 'MB', 'GB'];
+        $bytes = max($bytes, 0);
+        $pow = floor(($bytes ? log($bytes) : 0) / log(1024));
+        $pow = min($pow, count($units) - 1);
+        $bytes /= (1 << (10 * $pow));
+
+        return round($bytes, 2) . ' ' . $units[$pow];
     }
 
     /**
