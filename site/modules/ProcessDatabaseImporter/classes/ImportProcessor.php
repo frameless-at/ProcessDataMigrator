@@ -11,22 +11,6 @@ class ImportProcessor extends WireData {
     protected $imported = 0;
     protected $errors = [];
     protected $createdPages = [];
-    protected $fkMappings = [];
-    protected $currentTable = '';
-
-    /**
-     * Set FK mappings for this import
-     */
-    public function setFkMappings($fkMappings) {
-        $this->fkMappings = $fkMappings;
-    }
-
-    /**
-     * Set current table name
-     */
-    public function setCurrentTable($tableName) {
-        $this->currentTable = $tableName;
-    }
 
     /**
      * Import data and create pages
@@ -112,12 +96,6 @@ class ImportProcessor extends WireData {
         $this->wire()->log->save('db-importer', "Processing row with title: $title");
         $this->wire()->log->save('db-importer', "Row data columns: " . implode(', ', array_keys($row)));
         $this->wire()->log->save('db-importer', "Mapping fields: " . implode(', ', array_keys($mapping['fields'])));
-
-        // Store original SQL ID if template has _sql_original_id field
-        if ($template->fieldgroup->hasField('_sql_original_id') && isset($row['id'])) {
-            $page->set('_sql_original_id', (int) $row['id']);
-            $this->wire()->log->save('db-importer', "  SET: _sql_original_id = " . $row['id']);
-        }
 
         // Set field values from mapping
         foreach ($mapping['fields'] as $sourceColumn => $fieldMapping) {
@@ -216,11 +194,8 @@ class ImportProcessor extends WireData {
                 return $value;
 
             case 'FieldtypePage':
-                // Handle FK mapping if configured
-                if (isset($fieldMapping['fk_config'])) {
-                    return $this->resolveForeignKey($value, $fieldMapping['fk_config']);
-                }
-                // For page references without FK config, return null
+                // Page references cannot be imported from SQL data
+                // These fields will remain empty and need manual configuration
                 return null;
 
             case 'FieldtypeText':
@@ -229,40 +204,6 @@ class ImportProcessor extends WireData {
             case 'FieldtypeURL':
             default:
                 return $value;
-        }
-    }
-
-    /**
-     * Resolve a foreign key value to a Page reference
-     *
-     * @param mixed $fkValue The foreign key value (original SQL ID)
-     * @param array $fkConfig FK configuration (ref_table, ref_column)
-     * @return int|null Referenced page ID or null if not found
-     */
-    protected function resolveForeignKey($fkValue, $fkConfig) {
-        if (empty($fkValue)) {
-            return null;
-        }
-
-        $refTable = $fkConfig['ref_table'];
-        $refColumn = $fkConfig['ref_column'] ?? 'id';
-
-        $this->wire()->log->save('db-importer', "    FK LOOKUP: Searching for {$refTable} where {$refColumn} = {$fkValue}");
-
-        // Find the page with matching _sql_original_id
-        // The template name should match the table name
-        $templateName = $this->wire('sanitizer')->pageName($refTable, Sanitizer::translate);
-
-        $selector = "template={$templateName}, _sql_original_id=" . (int)$fkValue;
-        $referencedPage = $this->wire('pages')->get($selector);
-
-        if ($referencedPage && $referencedPage->id) {
-            $this->wire()->log->save('db-importer', "    FK FOUND: Page #{$referencedPage->id} ({$referencedPage->title})");
-            // Return Page ID for single-page reference fields (derefAsPage=1)
-            return $referencedPage->id;
-        } else {
-            $this->wire()->log->save('db-importer', "    FK NOT FOUND: No page found with selector: {$selector}");
-            return null;
         }
     }
 
