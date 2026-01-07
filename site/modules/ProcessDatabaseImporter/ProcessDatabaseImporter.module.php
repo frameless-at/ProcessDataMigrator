@@ -95,13 +95,15 @@ class ProcessDatabaseImporter extends Process implements Module {
                 }
 
                 // Store selected fields if submitted via POST (independent of selected_tables!)
-                $selectedFields = $this->input->post('fields');
+                // CRITICAL: Use $_POST directly - WireInput filters nested arrays!
+                $selectedFields = isset($_POST['fields']) ? $_POST['fields'] : null;
                 if ($selectedFields && is_array($selectedFields)) {
                     $sessionData['selected_fields'] = $selectedFields;
                 }
 
                 // Store fieldtype overrides if submitted via POST
-                $fieldtypeOverrides = $this->input->post('fieldtypes');
+                // CRITICAL: Use $_POST directly - WireInput filters nested arrays!
+                $fieldtypeOverrides = isset($_POST['fieldtypes']) ? $_POST['fieldtypes'] : null;
                 if ($fieldtypeOverrides && is_array($fieldtypeOverrides)) {
                     $sessionData['fieldtype_overrides'] = $fieldtypeOverrides;
                 }
