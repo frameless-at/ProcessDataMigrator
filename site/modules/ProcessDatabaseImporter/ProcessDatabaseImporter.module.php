@@ -539,24 +539,45 @@ class ProcessDatabaseImporter extends Process implements Module {
         $out .= '</tbody>';
         $out .= '</table>';
 
-        // FK Configuration Section (for Page Reference fields)
-        $pageRefFields = [];
+        // FK Configuration Section - show for all potential FK fields
+        // Include: fields suggested as Page Reference OR integer fields with "id" in name
+        $potentialFkFields = [];
         foreach ($analysis['columns'] as $column) {
             $columnName = $column['name'];
-            if ($column['suggested_fieldtype'] === 'FieldtypePage') {
-                $pageRefFields[] = $columnName;
+            $isPageRef = ($column['suggested_fieldtype'] === 'FieldtypePage');
+            $isIntWithId = (
+                in_array($column['detected_type'], ['integer', 'int']) &&
+                (stripos($columnName, 'id') !== false || stripos($columnName, '_fk') !== false)
+            );
+
+            if ($isPageRef || $isIntWithId) {
+                $potentialFkFields[] = [
+                    'name' => $columnName,
+                    'type' => $column['suggested_fieldtype'],
+                    'is_page_ref' => $isPageRef
+                ];
             }
         }
 
-        if (!empty($pageRefFields)) {
+        if (!empty($potentialFkFields)) {
             $out .= '<div style="margin-top: 15px; padding: 15px; background: #f9f9f9; border-left: 4px solid #0066cc; border-radius: 4px;">';
             $out .= '<h4 style="margin: 0 0 10px 0; font-size: 14px; color: #0066cc;">🔗 Foreign Key Configuration</h4>';
-            $out .= '<p style="margin: 0 0 10px 0; font-size: 11px; color: #666;">Configure how Page Reference fields map to other tables:</p>';
+            $out .= '<p style="margin: 0 0 10px 0; font-size: 11px; color: #666;">';
+            $out .= 'Configure Foreign Key mappings for Page Reference fields. ';
+            $out .= 'Only configure fields that you set to "Page Reference" above.';
+            $out .= '</p>';
 
-            foreach ($pageRefFields as $fieldName) {
-                $out .= '<div style="margin-bottom: 12px; padding: 10px; background: white; border: 1px solid #ddd; border-radius: 3px;">';
+            foreach ($potentialFkFields as $field) {
+                $fieldName = $field['name'];
+                $bgColor = $field['is_page_ref'] ? 'white' : '#fafafa';
+                $borderColor = $field['is_page_ref'] ? '#0066cc' : '#ddd';
+
+                $out .= '<div style="margin-bottom: 12px; padding: 10px; background: ' . $bgColor . '; border: 1px solid ' . $borderColor . '; border-radius: 3px;">';
                 $out .= '<label style="display: block; font-weight: bold; margin-bottom: 5px; font-size: 13px;">';
                 $out .= $this->sanitizer->entities($fieldName);
+                if ($field['is_page_ref']) {
+                    $out .= ' <span style="color: #0066cc; font-size: 11px; font-weight: normal;">(Page Reference)</span>';
+                }
                 $out .= '</label>';
 
                 $out .= '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">';
