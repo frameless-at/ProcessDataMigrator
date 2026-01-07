@@ -10,6 +10,16 @@ class SqlParser extends AbstractParser {
 
     protected $metadata = [];
     protected $tables = [];
+    protected $logger = null;
+
+    /**
+     * Set logger instance
+     *
+     * @param Logger $logger
+     */
+    public function setLogger($logger) {
+        $this->logger = $logger;
+    }
 
     /**
      * Check if this parser can handle the given file
@@ -68,7 +78,7 @@ class SqlParser extends AbstractParser {
         $memoryUsage = memory_get_usage(true);
         $availableMemory = $memoryLimit - $memoryUsage;
 
-        wire()->log->save('db-importer', sprintf(
+        if ($this->logger) $this->logger->info(sprintf(
             'Memory Check: File=%s, MemLimit=%s, Used=%s, Available=%s',
             $this->formatBytes($fileSize),
             $this->formatBytes($memoryLimit),
@@ -369,21 +379,21 @@ class SqlParser extends AbstractParser {
 
             // Use the highest scoring candidate
             $this->tables[$tableName]['primary_key'] = $candidates[0]['name'];
-            wire()->log->save('sql-parser', "\n=== PRIMARY KEY GUESSING ===");
-            wire()->log->save('sql-parser', "Table: $tableName");
-            wire()->log->save('sql-parser', "Guessed PK: {$candidates[0]['name']} (score: {$candidates[0]['score']})");
-            wire()->log->save('sql-parser', "All candidates: " . json_encode($candidates));
+            if ($this->logger) $this->logger->debug("\n=== PRIMARY KEY GUESSING ===");
+            if ($this->logger) $this->logger->debug("Table: $tableName");
+            if ($this->logger) $this->logger->debug("Guessed PK: {$candidates[0]['name']} (score: {$candidates[0]['score']})");
+            if ($this->logger) $this->logger->debug("All candidates: " . json_encode($candidates));
         } else {
             // Last resort: use first integer NOT NULL field
             foreach ($structure as $columnName => $columnInfo) {
                 if (($columnInfo['base_type'] ?? '') === 'integer' && !($columnInfo['nullable'] ?? true)) {
                     $this->tables[$tableName]['primary_key'] = $columnName;
-                    wire()->log->save('sql-parser', "Fallback: Using first integer NOT NULL field as PK for $tableName: $columnName");
+                    if ($this->logger) $this->logger->debug("Fallback: Using first integer NOT NULL field as PK for $tableName: $columnName");
                     return;
                 }
             }
 
-            wire()->log->save('sql-parser', "WARNING: Could not guess primary key for $tableName");
+            if ($this->logger) $this->logger->debug("WARNING: Could not guess primary key for $tableName");
         }
     }
 
@@ -531,14 +541,14 @@ class SqlParser extends AbstractParser {
             }, explode(',', $columnStr));
 
             // DEBUG: Log extracted columns
-            wire()->log->save('db-importer', "Extracted columns from INSERT: " . implode(', ', $columns));
+            if ($this->logger) $this->logger->info("Extracted columns from INSERT: " . implode(', ', $columns));
         } else {
             // Use structure columns if available
             if (isset($this->tables[$tableName]['structure'])) {
                 $columns = array_keys($this->tables[$tableName]['structure']);
-                wire()->log->save('db-importer', "Using structure columns: " . implode(', ', $columns));
+                if ($this->logger) $this->logger->info("Using structure columns: " . implode(', ', $columns));
             } else {
-                wire()->log->save('db-importer', "WARNING: No columns found for table $tableName");
+                if ($this->logger) $this->logger->info("WARNING: No columns found for table $tableName");
             }
         }
 
@@ -556,14 +566,14 @@ class SqlParser extends AbstractParser {
                     $combined = array_combine($columns, $values);
                     if ($combined === false) {
                         // Fallback to numeric keys if combine fails
-                        wire()->log->save('db-importer', "ERROR: array_combine failed for row");
+                        if ($this->logger) $this->logger->info("ERROR: array_combine failed for row");
                         $rows_processed[] = $values;
                     } else {
                         $rows_processed[] = $combined;
                     }
                 } else {
                     // If no columns or mismatch, use numeric keys
-                    wire()->log->save('db-importer', "WARNING: Column count mismatch. Columns: " . count($columns ?: []) . ", Values: " . count($values));
+                    if ($this->logger) $this->logger->info("WARNING: Column count mismatch. Columns: " . count($columns ?: []) . ", Values: " . count($values));
                     $rows_processed[] = $values;
                 }
             }
@@ -571,7 +581,7 @@ class SqlParser extends AbstractParser {
             return $rows_processed;
         }
 
-        wire()->log->save('db-importer', "ERROR: No VALUES clause found in INSERT statement");
+        if ($this->logger) $this->logger->info("ERROR: No VALUES clause found in INSERT statement");
         return [];
     }
 

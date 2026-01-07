@@ -2,6 +2,7 @@
 
 namespace ProcessWire;
 
+require_once(__DIR__ . '/classes/Logger.php');
 require_once(__DIR__ . '/classes/parsers/AbstractParser.php');
 require_once(__DIR__ . '/classes/parsers/SqlParser.php');
 require_once(__DIR__ . '/classes/DataAnalyzer.php');
@@ -461,8 +462,9 @@ class ProcessDatabaseImporter extends Process implements Module {
      * Process uploaded file
      */
     protected function processUpload($filePath, $sampleSize = 100, $maxRows = 0) {
-        // Initialize parser
+        // Initialize parser with logger
         $parser = new SqlParser();
+        $parser->setLogger($this->getLogger());
 
         if (!$parser->canParse($filePath)) {
             return [
@@ -1102,6 +1104,7 @@ class ProcessDatabaseImporter extends Process implements Module {
                 }
 
                 $importProcessor = $this->wire(new ImportProcessor());
+                $importProcessor->setLogger($this->getLogger());
 
                 // Enable dry-run mode if requested
                 if ($dryRun) {
@@ -1451,5 +1454,38 @@ class ProcessDatabaseImporter extends Process implements Module {
         }
 
         // Note: We don't remove the permission as it might be in use
+    }
+
+    /**
+     * Module configuration
+     */
+    public function getModuleConfigInputfields(InputfieldWrapper $inputfields) {
+        // Log Level setting
+        $f = $this->modules->get('InputfieldRadios');
+        $f->name = 'log_level';
+        $f->label = $this->_('Log Level');
+        $f->description = $this->_('Control how much information is written to the log file');
+        $f->notes = $this->_('Lower levels produce smaller log files. Higher levels help with debugging.');
+        $f->addOption(Logger::ERROR, $this->_('ERROR - Only critical errors'));
+        $f->addOption(Logger::WARNING, $this->_('WARNING - Errors and warnings'));
+        $f->addOption(Logger::INFO, $this->_('INFO - Errors, warnings, and important info (recommended)'));
+        $f->addOption(Logger::DEBUG, $this->_('DEBUG - Everything including detailed debug info'));
+        $f->value = $this->log_level ?: Logger::INFO;
+        $f->columnWidth = 100;
+        $inputfields->add($f);
+
+        return $inputfields;
+    }
+
+    /**
+     * Get logger instance with configured level
+     *
+     * @return Logger
+     */
+    protected function getLogger() {
+        $logger = $this->wire(new Logger());
+        $logger->setLevel($this->log_level ?: Logger::INFO);
+        $logger->setLogName('db-importer');
+        return $logger;
     }
 }
