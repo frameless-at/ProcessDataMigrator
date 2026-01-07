@@ -237,7 +237,7 @@ class ImportProcessor extends WireData {
      *
      * @param mixed $fkValue The foreign key value (original SQL ID)
      * @param array $fkConfig FK configuration (ref_table, ref_column)
-     * @return Page|null Referenced page or null if not found
+     * @return int|null Referenced page ID or null if not found
      */
     protected function resolveForeignKey($fkValue, $fkConfig) {
         if (empty($fkValue)) {
@@ -258,7 +258,8 @@ class ImportProcessor extends WireData {
 
         if ($referencedPage && $referencedPage->id) {
             $this->wire()->log->save('db-importer', "    FK FOUND: Page #{$referencedPage->id} ({$referencedPage->title})");
-            return $referencedPage;
+            // Return Page ID for single-page reference fields (derefAsPage=1)
+            return $referencedPage->id;
         } else {
             $this->wire()->log->save('db-importer', "    FK NOT FOUND: No page found with selector: {$selector}");
             return null;
