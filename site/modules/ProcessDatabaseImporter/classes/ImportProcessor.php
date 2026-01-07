@@ -14,6 +14,16 @@ class ImportProcessor extends WireData {
     protected $fkMappings = [];
     protected $globalIdMapping = [];
     protected $localIdMapping = [];
+    protected $dryRun = false;
+
+    /**
+     * Set dry-run mode
+     *
+     * @param bool $dryRun If true, simulate import without saving
+     */
+    public function setDryRun($dryRun) {
+        $this->dryRun = (bool) $dryRun;
+    }
 
     /**
      * Import data and create pages
@@ -157,7 +167,17 @@ class ImportProcessor extends WireData {
             $this->wire()->log->save('db-importer', "  SET: $targetField = " . var_export($value, true));
         }
 
-        // Save page
+        // Save page (unless in dry-run mode)
+        if ($this->dryRun) {
+            // DRY-RUN: Don't save, just validate and return mock page
+            $this->wire()->log->save('db-importer', "  DRY-RUN: Skipping page save");
+
+            // Assign temporary ID for dry-run mode (for FK resolution simulation)
+            $page->id = 999000 + $this->imported;
+
+            return $page;
+        }
+
         $saved = $page->save();
 
         // Check if save was successful

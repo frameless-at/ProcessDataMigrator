@@ -726,6 +726,14 @@ class ProcessDatabaseImporter extends Process implements Module {
     protected function buildAnalysisActions() {
         $out = '<div class="uk-margin">';
 
+        // Dry-run option
+        $out .= '<div class="uk-margin-small" style="margin-bottom: 10px;">';
+        $out .= '<label style="display: inline-flex; align-items: center; gap: 6px;">';
+        $out .= '<input type="checkbox" name="dry_run" value="1">';
+        $out .= '<span>' . $this->_('Dry-Run Mode (test import without saving data)') . '</span>';
+        $out .= '</label>';
+        $out .= '</div>';
+
         // Import button (submits form with selected tables)
         $out .= '<button type="submit" name="action" value="import" class="ui-button ui-priority-primary">';
         $out .= '<i class="fa fa-upload"></i> ' . $this->_('Import Selected Tables');
@@ -800,6 +808,12 @@ class ProcessDatabaseImporter extends Process implements Module {
         if (!$sessionData || !isset($sessionData['analysis'])) {
             $this->error($this->_('No analysis data found. Please start over.'));
             $this->session->redirect($this->page->url);
+        }
+
+        // Check for dry-run mode
+        $dryRun = $this->input->post('dry_run') ? true : false;
+        if ($dryRun) {
+            $this->message($this->_('DRY-RUN MODE: No data will be saved'));
         }
 
         // Get all tables data
@@ -924,16 +938,38 @@ class ProcessDatabaseImporter extends Process implements Module {
                     }
                 }
 
-                // Step 2: Create template and fields
+                // Step 2: Create template and fields (skip in dry-run mode)
                 $templateCreator = $this->wire(new TemplateCreator());
-                $template = $templateCreator->createTemplate($mapping);
 
-                $this->message($this->_('Created template: ') . $template->name);
+                if ($dryRun) {
+                    // DRY-RUN: Use existing template or create mock template
+                    $template = $this->templates->get($mapping['template']);
+                    if (!$template) {
+                        $template = new \ProcessWire\Template();
+                        $template->name = $mapping['template'];
+                        $this->message($this->_('[DRY-RUN] Would create template: ') . $template->name);
+                    } else {
+                        $this->message($this->_('[DRY-RUN] Using existing template: ') . $template->name);
+                    }
 
-                // Step 3: Create parent page
-                $parent = $templateCreator->createParentPage($mapping['parent'], $template->name);
+                    // DRY-RUN: Use existing parent or create mock parent
+                    $parent = $this->pages->get($mapping['parent']);
+                    if (!$parent->id) {
+                        $parent = new \ProcessWire\Page();
+                        $parent->id = 999999; // Mock ID
+                        $parent->path = $mapping['parent'];
+                        $this->message($this->_('[DRY-RUN] Would create parent page: ') . $parent->path);
+                    } else {
+                        $this->message($this->_('[DRY-RUN] Using existing parent page: ') . $parent->path);
+                    }
+                } else {
+                    $template = $templateCreator->createTemplate($mapping);
+                    $this->message($this->_('Created template: ') . $template->name);
 
-                $this->message($this->_('Created parent page: ') . $parent->path);
+                    // Step 3: Create parent page
+                    $parent = $templateCreator->createParentPage($mapping['parent'], $template->name);
+                    $this->message($this->_('Created parent page: ') . $parent->path);
+                }
 
                 // Step 4: Import data
                 // CRITICAL: Limit data to max_rows for import (analysis used full sample_size)
@@ -944,6 +980,11 @@ class ProcessDatabaseImporter extends Process implements Module {
                 }
 
                 $importProcessor = $this->wire(new ImportProcessor());
+
+                // Enable dry-run mode if requested
+                if ($dryRun) {
+                    $importProcessor->setDryRun(true);
+                }
 
                 // Pass FK mappings and ID mapping for this table
                 $tableFkMappings = isset($fkMappings[$tableName]) ? $fkMappings[$tableName] : [];
@@ -989,7 +1030,50 @@ class ProcessDatabaseImporter extends Process implements Module {
             $this->session->redirect($this->page->url);
 
         } catch (\Exception $e) {
+            // AUTOMATIC ROLLBACK on critical errors
             $this->error($this->_('Import failed: ') . $e->getMessage());
+            $this->error($this->_('Initiating automatic rollback...'));
+
+            // Perform automatic rollback of all imported data
+            if (!empty($allRollbackData)) {
+                $rollback = $this->wire(new ImportRollback());
+                $rollbackResult = [
+                    'pages_deleted' => 0,
+                    'templates_deleted' => 0,
+                    'fields_deleted' => 0,
+                    'errors' => []
+                ];
+
+                foreach ($allRollbackData as $tableRollback) {
+                    $result = $rollback->rollback($tableRollback);
+                    $rollbackResult['pages_deleted'] += $result['pages_deleted'];
+                    $rollbackResult['templates_deleted'] += $result['templates_deleted'];
+                    $rollbackResult['fields_deleted'] += $result['fields_deleted'];
+                    $rollbackResult['errors'] = array_merge($rollbackResult['errors'], $result['errors']);
+                }
+
+                if (empty($rollbackResult['errors'])) {
+                    $this->message($this->_('Automatic rollback completed successfully'));
+                    $this->message(sprintf(
+                        $this->_('Deleted: %d pages, %d templates, %d fields'),
+                        $rollbackResult['pages_deleted'],
+                        $rollbackResult['templates_deleted'],
+                        $rollbackResult['fields_deleted']
+                    ));
+                } else {
+                    $this->warning($this->_('Rollback completed with errors:'));
+                    foreach ($rollbackResult['errors'] as $error) {
+                        $this->warning('  - ' . $error);
+                    }
+                }
+            } else {
+                $this->message($this->_('No data was imported yet, rollback not needed'));
+            }
+
+            // Clear session data
+            $this->session->remove(self::SESSION_KEY);
+
+            // Return to analysis view
             return $this->executeAnalyze();
         }
     }
