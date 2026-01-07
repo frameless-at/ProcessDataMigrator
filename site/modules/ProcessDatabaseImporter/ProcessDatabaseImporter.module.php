@@ -102,8 +102,11 @@ class ProcessDatabaseImporter extends Process implements Module {
 
                 // Store fieldtype overrides if submitted via POST
                 $fieldtypeOverrides = $this->input->post('fieldtypes');
+                $this->wire()->log->save('db-importer', "=== FIELDTYPE OVERRIDES DEBUG ===");
+                $this->wire()->log->save('db-importer', "POST fieldtypes: " . print_r($fieldtypeOverrides, true));
                 if ($fieldtypeOverrides && is_array($fieldtypeOverrides)) {
                     $sessionData['fieldtype_overrides'] = $fieldtypeOverrides;
+                    $this->wire()->log->save('db-importer', "Stored in session: " . print_r($fieldtypeOverrides, true));
                 }
 
                 $this->session->set(self::SESSION_KEY, $sessionData);
@@ -616,10 +619,14 @@ class ProcessDatabaseImporter extends Process implements Module {
                 // Apply fieldtype overrides (if user changed them in UI)
                 if (isset($sessionData['fieldtype_overrides'][$tableName])) {
                     $overrides = $sessionData['fieldtype_overrides'][$tableName];
+                    $this->wire()->log->save('db-importer', "=== APPLYING OVERRIDES FOR: {$tableName} ===");
+                    $this->wire()->log->save('db-importer', "Overrides from session: " . print_r($overrides, true));
+                    $this->wire()->log->save('db-importer', "Mapping fields keys: " . implode(', ', array_keys($mapping['fields'])));
                     $overrideCount = 0;
                     foreach ($mapping['fields'] as $fieldName => $fieldMapping) {
                         // CRITICAL: Use source_column, not the prefixed field name!
                         $sourceColumn = $fieldMapping['source_column'];
+                        $this->wire()->log->save('db-importer', "Checking field: fieldName={$fieldName}, sourceColumn={$sourceColumn}");
 
                         if (isset($overrides[$sourceColumn]) && $overrides[$sourceColumn] !== $fieldMapping['fieldtype']) {
                             $oldType = $fieldMapping['fieldtype'];
