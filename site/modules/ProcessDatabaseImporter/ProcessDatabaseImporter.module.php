@@ -724,27 +724,38 @@ class ProcessDatabaseImporter extends Process implements Module {
      * Build analysis action buttons
      */
     protected function buildAnalysisActions() {
-        $out = '<div class="uk-margin">';
+        $out = '<div class="uk-margin" style="border-top: 2px solid #e0e0e0; padding-top: 20px; margin-top: 30px;">';
 
-        // Dry-run option
-        $out .= '<div class="uk-margin-small" style="margin-bottom: 10px;">';
-        $out .= '<label style="display: inline-flex; align-items: center; gap: 6px;">';
-        $out .= '<input type="checkbox" name="dry_run" value="1">';
-        $out .= '<span>' . $this->_('Dry-Run Mode (test import without saving data)') . '</span>';
+        // Dry-run option with prominent styling
+        $out .= '<div style="background: #f8f9fa; border: 2px dashed #6c757d; border-radius: 6px; padding: 15px; margin-bottom: 20px;">';
+        $out .= '<label style="display: flex; align-items: center; gap: 10px; cursor: pointer; margin: 0;">';
+        $out .= '<input type="checkbox" name="dry_run" value="1" style="width: 18px; height: 18px; cursor: pointer;">';
+        $out .= '<div style="flex: 1;">';
+        $out .= '<strong style="font-size: 14px; color: #495057;">';
+        $out .= '<i class="fa fa-flask" style="color: #6c757d; margin-right: 5px;"></i> ';
+        $out .= $this->_('Dry-Run Mode (Test Import)');
+        $out .= '</strong>';
+        $out .= '<div style="font-size: 12px; color: #6c757d; margin-top: 4px;">';
+        $out .= $this->_('Simulate the import process without saving any data to the database. Use this to preview what will be created.');
+        $out .= '</div>';
+        $out .= '</div>';
         $out .= '</label>';
         $out .= '</div>';
 
+        // Buttons container
+        $out .= '<div style="display: flex; gap: 10px; align-items: center;">';
+
         // Import button (submits form with selected tables)
-        $out .= '<button type="submit" name="action" value="import" class="ui-button ui-priority-primary">';
+        $out .= '<button type="submit" name="action" value="import" class="ui-button ui-priority-primary" style="font-size: 14px; padding: 10px 20px;">';
         $out .= '<i class="fa fa-upload"></i> ' . $this->_('Import Selected Tables');
         $out .= '</button>';
 
-        $out .= ' &nbsp; ';
-
         // Clear session button
-        $out .= '<a href="' . $this->page->url . '?action=clear" class="ui-button ui-priority-secondary">';
+        $out .= '<a href="' . $this->page->url . '?action=clear" class="ui-button ui-priority-secondary" style="font-size: 14px; padding: 10px 20px;">';
         $out .= '<i class="fa fa-arrow-left"></i> ' . $this->_('Start Over');
         $out .= '</a>';
+
+        $out .= '</div>';
 
         $out .= '</div>';
 
