@@ -357,19 +357,6 @@ class ProcessDatabaseImporter extends Process implements Module {
 
         $out = '<form method="post" action="' . $this->page->url . '">';
         $out .= '<div class="database-importer-analysis">';
-
-        // Add JavaScript for FK config toggle
-        $out .= '<script>
-        function toggleFKConfig(selectElement, configId) {
-            var configDiv = document.getElementById(configId);
-            if (selectElement.value === "FieldtypePage") {
-                configDiv.style.display = "block";
-            } else {
-                configDiv.style.display = "none";
-            }
-        }
-        </script>';
-
         // Summary
         $totalRows = array_sum(array_column($analysis, 'row_count'));
         $totalColumns = array_sum(array_map(function($table) {
@@ -430,18 +417,14 @@ class ProcessDatabaseImporter extends Process implements Module {
     /**
      * Build fieldtype selector dropdown
      */
-    protected function buildFieldtypeSelector($tableName, $columnName, $suggested, $allTableNames = []) {
+    protected function buildFieldtypeSelector($tableName, $columnName, $suggested) {
         $fieldtypes = $this->getAvailableFieldtypes();
 
         // CRITICAL: Don't escape the square brackets in the name attribute!
         // entities() would convert [ to &#91; which breaks POST array structure
         $safeName = 'fieldtypes[' . $this->sanitizer->name($tableName) . '][' . $this->sanitizer->name($columnName) . ']';
 
-        $fkConfigId = 'fk-config-' . $this->sanitizer->name($tableName) . '-' . $this->sanitizer->name($columnName);
-
-        $out = '<div>';
-        $out .= '<select name="' . $safeName . '" class="uk-select" style="font-size: 12px; padding: 2px 4px;" ';
-        $out .= 'onchange="toggleFKConfig(this, \'' . $fkConfigId . '\')">';
+        $out = '<select name="' . $safeName . '" class="uk-select" style="font-size: 12px; padding: 2px 4px;">';
 
         foreach ($fieldtypes as $type => $label) {
             $selected = ($type === $suggested) ? ' selected' : '';
@@ -449,27 +432,6 @@ class ProcessDatabaseImporter extends Process implements Module {
         }
 
         $out .= '</select>';
-
-        // FK Configuration Panel (initially hidden unless FieldtypePage is selected)
-        $display = ($suggested === 'FieldtypePage') ? 'block' : 'none';
-        $out .= '<div id="' . $fkConfigId . '" class="fk-config-panel" style="display:' . $display . '; margin:5px 0; padding:8px; background:#f0f8ff; border-left:3px solid #0066cc; font-size:11px;">';
-        $out .= '<strong style="font-size:10px;">🔗 Page Reference Configuration</strong><br>';
-
-        $out .= '<label style="font-size:10px; margin-top:5px; display:inline-block;">Referenced Table:</label> ';
-        $out .= '<select name="fk_ref_table[' . $this->sanitizer->name($tableName) . '][' . $this->sanitizer->name($columnName) . ']" style="font-size:10px; padding:2px;">';
-        $out .= '<option value="">-- Select Table --</option>';
-        foreach ($allTableNames as $tbl) {
-            $out .= '<option value="' . $this->sanitizer->entities($tbl) . '">' . $this->sanitizer->entities($tbl) . '</option>';
-        }
-        $out .= '</select><br>';
-
-        $out .= '<label style="font-size:10px; margin-top:3px; display:inline-block;">Referenced Column:</label> ';
-        $out .= '<input type="text" name="fk_ref_column[' . $this->sanitizer->name($tableName) . '][' . $this->sanitizer->name($columnName) . ']" ';
-        $out .= 'value="id" placeholder="id" style="width:60px; font-size:10px; padding:2px;"> ';
-        $out .= '<span style="font-size:9px; color:#666;">(usually "id")</span>';
-
-        $out .= '</div>';
-        $out .= '</div>';
 
         return $out;
     }
@@ -556,7 +518,7 @@ class ProcessDatabaseImporter extends Process implements Module {
             $out .= '</td>';
             $out .= '<td><code>' . $this->sanitizer->entities($column['sql_type']) . '</code></td>';
             $out .= '<td>' . $this->sanitizer->entities($column['detected_type']) . '</td>';
-            $out .= '<td>' . $this->buildFieldtypeSelector($tableName, $columnName, $column['suggested_fieldtype'], $allTableNames) . '</td>';
+            $out .= '<td>' . $this->buildFieldtypeSelector($tableName, $columnName, $column['suggested_fieldtype']) . '</td>';
 
             // Confidence with color
             $confidence = $column['detection_confidence'];
@@ -577,11 +539,59 @@ class ProcessDatabaseImporter extends Process implements Module {
         $out .= '</tbody>';
         $out .= '</table>';
 
+        // FK Configuration Section (for Page Reference fields)
+        $pageRefFields = [];
+        foreach ($analysis['columns'] as $column) {
+            $columnName = $column['name'];
+            if ($column['suggested_fieldtype'] === 'FieldtypePage') {
+                $pageRefFields[] = $columnName;
+            }
+        }
+
+        if (!empty($pageRefFields)) {
+            $out .= '<div style="margin-top: 15px; padding: 15px; background: #f9f9f9; border-left: 4px solid #0066cc; border-radius: 4px;">';
+            $out .= '<h4 style="margin: 0 0 10px 0; font-size: 14px; color: #0066cc;">🔗 Foreign Key Configuration</h4>';
+            $out .= '<p style="margin: 0 0 10px 0; font-size: 11px; color: #666;">Configure how Page Reference fields map to other tables:</p>';
+
+            foreach ($pageRefFields as $fieldName) {
+                $out .= '<div style="margin-bottom: 12px; padding: 10px; background: white; border: 1px solid #ddd; border-radius: 3px;">';
+                $out .= '<label style="display: block; font-weight: bold; margin-bottom: 5px; font-size: 13px;">';
+                $out .= $this->sanitizer->entities($fieldName);
+                $out .= '</label>';
+
+                $out .= '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">';
+
+                // Referenced Table
+                $out .= '<div>';
+                $out .= '<label style="display: block; font-size: 11px; margin-bottom: 3px; color: #666;">Referenced Table:</label>';
+                $out .= '<select name="fk_ref_table[' . $this->sanitizer->name($tableName) . '][' . $this->sanitizer->name($fieldName) . ']" ';
+                $out .= 'class="uk-select" style="font-size: 12px; width: 100%;">';
+                $out .= '<option value="">-- Select Table --</option>';
+                foreach ($allTableNames as $tbl) {
+                    $out .= '<option value="' . $this->sanitizer->entities($tbl) . '">' . $this->sanitizer->entities($tbl) . '</option>';
+                }
+                $out .= '</select>';
+                $out .= '</div>';
+
+                // Referenced Column
+                $out .= '<div>';
+                $out .= '<label style="display: block; font-size: 11px; margin-bottom: 3px; color: #666;">Referenced Column:</label>';
+                $out .= '<input type="text" ';
+                $out .= 'name="fk_ref_column[' . $this->sanitizer->name($tableName) . '][' . $this->sanitizer->name($fieldName) . ']" ';
+                $out .= 'value="id" placeholder="id" class="uk-input" style="font-size: 12px; width: 100%;">';
+                $out .= '</div>';
+
+                $out .= '</div>'; // grid
+                $out .= '</div>'; // field container
+            }
+
+            $out .= '</div>'; // FK config section
+        }
+
         // Info about special fieldtypes
         $out .= '<div class="uk-alert uk-alert-primary" style="margin-top: 10px; font-size: 11px;">';
         $out .= '<strong>Note:</strong> ';
-        $out .= '* Page Reference fields will be created but require manual configuration after import. ';
-        $out .= '** Image/File fields will be created but file data cannot be imported from SQL.';
+        $out .= 'Image/File fields will be created but file data cannot be imported from SQL.';
         $out .= '</div>';
 
         $out .= '</div>';
@@ -727,16 +737,9 @@ class ProcessDatabaseImporter extends Process implements Module {
             $selectedTables = $sortedTables;
         }
 
-        // Determine which tables need _sql_original_id field
-        $tablesNeedingOriginalId = [];
-        foreach ($fkMappings as $sourceTbl => $fks) {
-            foreach ($fks as $fkConfig) {
-                $targetTbl = $fkConfig['ref_table'];
-                if (!in_array($targetTbl, $tablesNeedingOriginalId)) {
-                    $tablesNeedingOriginalId[] = $targetTbl;
-                }
-            }
-        }
+        // All imported tables need _sql_original_id field for potential FK references
+        // It's simpler and safer to add it to all tables rather than trying to determine which ones need it
+        $tablesNeedingOriginalId = $selectedTables;
 
         // Import each selected table
         $allRollbackData = [];
