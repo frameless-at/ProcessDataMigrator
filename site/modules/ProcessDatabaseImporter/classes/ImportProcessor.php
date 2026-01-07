@@ -137,10 +137,15 @@ class ImportProcessor extends WireData {
 
             $this->wire()->log->save('db-importer', "Checking field: $sourceColumn -> $targetField ($fieldtype)");
 
-            // Skip if field doesn't exist in template
-            if (!$template->fieldgroup->hasField($targetField)) {
+            // Skip if field doesn't exist in template (except in dry-run mode)
+            if (!$this->dryRun && $template->fieldgroup && !$template->fieldgroup->hasField($targetField)) {
                 $this->wire()->log->save('db-importer', "  SKIP: Field $targetField not in template");
                 continue;
+            }
+
+            // In dry-run mode, skip field validation since template might be a mock
+            if ($this->dryRun) {
+                $this->wire()->log->save('db-importer', "  DRY-RUN: Skipping field existence check for $targetField");
             }
 
             // Skip image/file fields - these need special handling with actual files
