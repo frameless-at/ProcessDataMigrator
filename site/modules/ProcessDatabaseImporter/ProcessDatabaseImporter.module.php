@@ -100,6 +100,12 @@ class ProcessDatabaseImporter extends Process implements Module {
                     $sessionData['selected_fields'] = $selectedFields;
                 }
 
+                // Store fieldtype overrides if submitted via POST
+                $fieldtypeOverrides = $this->input->post('fieldtypes');
+                if ($fieldtypeOverrides && is_array($fieldtypeOverrides)) {
+                    $sessionData['fieldtype_overrides'] = $fieldtypeOverrides;
+                }
+
                 $this->session->set(self::SESSION_KEY, $sessionData);
                 return $this->executeImport();
             }
@@ -364,6 +370,46 @@ class ProcessDatabaseImporter extends Process implements Module {
     }
 
     /**
+     * Get available fieldtypes for selection
+     */
+    protected function getAvailableFieldtypes() {
+        return [
+            'FieldtypeText' => 'Text',
+            'FieldtypeTextarea' => 'Textarea',
+            'FieldtypeInteger' => 'Integer',
+            'FieldtypeFloat' => 'Float',
+            'FieldtypeCheckbox' => 'Checkbox',
+            'FieldtypeEmail' => 'Email',
+            'FieldtypeURL' => 'URL',
+            'FieldtypeDatetime' => 'Datetime',
+            'FieldtypeOptions' => 'Options/Select',
+            'FieldtypePage' => 'Page Reference *',
+            'FieldtypeImage' => 'Image **',
+            'FieldtypeFile' => 'File **',
+            'FieldtypePassword' => 'Password',
+        ];
+    }
+
+    /**
+     * Build fieldtype selector dropdown
+     */
+    protected function buildFieldtypeSelector($tableName, $columnName, $suggested) {
+        $fieldtypes = $this->getAvailableFieldtypes();
+
+        $out = '<select name="fieldtypes[' . $this->sanitizer->entities($tableName) . '][' . $this->sanitizer->entities($columnName) . ']" ';
+        $out .= 'class="uk-select" style="font-size: 12px; padding: 2px 4px;">';
+
+        foreach ($fieldtypes as $type => $label) {
+            $selected = ($type === $suggested) ? ' selected' : '';
+            $out .= '<option value="' . $this->sanitizer->entities($type) . '"' . $selected . '>' . $this->sanitizer->entities($label) . '</option>';
+        }
+
+        $out .= '</select>';
+
+        return $out;
+    }
+
+    /**
      * Build single table analysis view
      */
     protected function buildTableAnalysis($tableName, $analysis) {
@@ -445,7 +491,7 @@ class ProcessDatabaseImporter extends Process implements Module {
             $out .= '</td>';
             $out .= '<td><code>' . $this->sanitizer->entities($column['sql_type']) . '</code></td>';
             $out .= '<td>' . $this->sanitizer->entities($column['detected_type']) . '</td>';
-            $out .= '<td><code>' . $this->sanitizer->entities($column['suggested_fieldtype']) . '</code></td>';
+            $out .= '<td>' . $this->buildFieldtypeSelector($tableName, $columnName, $column['suggested_fieldtype']) . '</td>';
 
             // Confidence with color
             $confidence = $column['detection_confidence'];
@@ -465,6 +511,13 @@ class ProcessDatabaseImporter extends Process implements Module {
 
         $out .= '</tbody>';
         $out .= '</table>';
+
+        // Info about special fieldtypes
+        $out .= '<div class="uk-alert uk-alert-primary" style="margin-top: 10px; font-size: 11px;">';
+        $out .= '<strong>Note:</strong> ';
+        $out .= '* Page Reference fields will be created but require manual configuration after import. ';
+        $out .= '** Image/File fields will be created but file data cannot be imported from SQL.';
+        $out .= '</div>';
 
         $out .= '</div>';
 
@@ -558,6 +611,24 @@ class ProcessDatabaseImporter extends Process implements Module {
                     $mapping['fields'] = $filteredFields;
                     $fieldCount = count($filteredFields);
                     $this->message($this->_("Filtered to $fieldCount selected field(s) for table {$tableName}"));
+                }
+
+                // Apply fieldtype overrides (if user changed them in UI)
+                if (isset($sessionData['fieldtype_overrides'][$tableName])) {
+                    $overrides = $sessionData['fieldtype_overrides'][$tableName];
+                    $overrideCount = 0;
+                    foreach ($mapping['fields'] as $columnName => $fieldMapping) {
+                        if (isset($overrides[$columnName]) && $overrides[$columnName] !== $fieldMapping['fieldtype']) {
+                            $oldType = $fieldMapping['fieldtype'];
+                            $newType = $overrides[$columnName];
+                            $mapping['fields'][$columnName]['fieldtype'] = $newType;
+                            $overrideCount++;
+                            $this->message($this->_("Override: {$columnName} changed from {$oldType} to {$newType}"));
+                        }
+                    }
+                    if ($overrideCount > 0) {
+                        $this->message($this->_("Applied {$overrideCount} fieldtype override(s) for table {$tableName}"));
+                    }
                 }
 
                 // Step 2: Create template and fields
