@@ -955,10 +955,11 @@ class ProcessDatabaseImporter extends Process implements Module {
                     // DRY-RUN: Use existing parent or create mock parent
                     $parent = $this->pages->get($mapping['parent']);
                     if (!$parent->id) {
-                        $parent = new \ProcessWire\Page();
+                        $parent = new \ProcessWire\NullPage();
                         $parent->id = 999999; // Mock ID
-                        $parent->path = $mapping['parent'];
-                        $this->message($this->_('[DRY-RUN] Would create parent page: ') . $parent->path);
+                        // Don't set path directly - it requires a template
+                        $mockPath = $mapping['parent'];
+                        $this->message($this->_('[DRY-RUN] Would create parent page: ') . $mockPath);
                     } else {
                         $this->message($this->_('[DRY-RUN] Using existing parent page: ') . $parent->path);
                     }
