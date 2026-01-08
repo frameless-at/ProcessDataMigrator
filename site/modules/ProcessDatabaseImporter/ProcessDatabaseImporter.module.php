@@ -587,9 +587,13 @@ class ProcessDatabaseImporter extends Process implements Module, ConfigurableMod
         // Check if there's a fieldtype override from session data
         $selectedFieldtype = $sessionData['fieldtype_overrides'][$tableName][$columnName] ?? $suggested;
 
-        // CRITICAL: Don't escape the square brackets in the name attribute!
-        // entities() would convert [ to &#91; which breaks POST array structure
-        $safeName = 'fieldtypes[' . $this->sanitizer->name($tableName) . '][' . $this->sanitizer->name($columnName) . ']';
+        // CRITICAL: Sanitize table/column names for use in HTML attribute
+        // Use entities() to preserve underscores (name() would remove them)
+        // But we need the raw names for the attribute brackets, not HTML-encoded
+        // So we use a simple regex to allow only safe characters: a-z, 0-9, underscore, hyphen
+        $safeTable = preg_replace('/[^a-zA-Z0-9_-]/', '', $tableName);
+        $safeColumn = preg_replace('/[^a-zA-Z0-9_-]/', '', $columnName);
+        $safeName = 'fieldtypes[' . $safeTable . '][' . $safeColumn . ']';
 
         $out = '<select name="' . $safeName . '" class="uk-select" style="font-size: 12px; padding: 2px 4px;">';
 
@@ -710,7 +714,11 @@ class ProcessDatabaseImporter extends Process implements Module, ConfigurableMod
                 $selectedFk = $sessionData['fk_mappings'][$tableName][$columnName] ?? '';
 
                 $out .= '<span style="color: #666; font-size: 11px;">FK:</span>';
-                $out .= '<select name="fk_table[' . $this->sanitizer->name($tableName) . '][' . $this->sanitizer->name($columnName) . ']" ';
+                // IMPORTANT: Sanitize table/column names but preserve underscores
+                // Use regex to allow: a-z, 0-9, underscore, hyphen (standard SQL identifiers)
+                $safeTable = preg_replace('/[^a-zA-Z0-9_-]/', '', $tableName);
+                $safeColumn = preg_replace('/[^a-zA-Z0-9_-]/', '', $columnName);
+                $out .= '<select name="fk_table[' . $safeTable . '][' . $safeColumn . ']" ';
                 $out .= 'class="uk-select" style="font-size: 12px; padding: 2px 6px; width: auto; min-width: 100px;">';
                 $out .= '<option value="">--</option>';
                 foreach ($allTableNames as $tbl) {
