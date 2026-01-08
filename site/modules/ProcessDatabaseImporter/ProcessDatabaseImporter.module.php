@@ -185,8 +185,17 @@ class ProcessDatabaseImporter extends Process implements Module, ConfigurableMod
                         }
 
                         $cleanColumn = preg_replace('/[^a-zA-Z0-9_]/', '', $column);
-                        // For fieldtype values, allow only known ProcessWire fieldtype class names
-                        $cleanValue = preg_replace('/[^a-zA-Z0-9]/', '', $value);
+
+                        // For values: distinguish between fieldtype names and table names
+                        // Fieldtype class names: no underscores (e.g., FieldtypeText)
+                        // Table names: allow underscores (e.g., ikt_content)
+                        if (strpos($value, 'Fieldtype') === 0) {
+                            // Fieldtype class name - no underscores
+                            $cleanValue = preg_replace('/[^a-zA-Z0-9]/', '', $value);
+                        } else {
+                            // Table name or other value - allow underscores
+                            $cleanValue = preg_replace('/[^a-zA-Z0-9_]/', '', $value);
+                        }
 
                         if (!empty($cleanColumn) && !empty($cleanValue) &&
                             strlen($cleanColumn) <= 64 && strlen($cleanValue) <= 64) {
