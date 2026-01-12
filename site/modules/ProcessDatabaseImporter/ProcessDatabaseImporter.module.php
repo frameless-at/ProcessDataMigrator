@@ -85,7 +85,7 @@ class ProcessDatabaseImporter extends Process implements Module {
             if ($action === 'clear') {
                 return $this->executeClear();
             }
-            if ($action === 'import') {
+            if ($action === 'dry_run' || $action === 'import') {
                 $sessionData = $this->session->get(self::SESSION_KEY);
 
                 // Store selected tables if submitted via POST
@@ -125,6 +125,16 @@ class ProcessDatabaseImporter extends Process implements Module {
                 }
 
                 $this->session->set(self::SESSION_KEY, $sessionData);
+
+                // Route to dry run or actual import
+                if ($action === 'dry_run') {
+                    return $this->executeDryRun();
+                } else {
+                    return $this->executeImport();
+                }
+            }
+            if ($action === 'confirm_import') {
+                // Execute import with existing session data (after dry run confirmation)
                 return $this->executeImport();
             }
             if ($action === 'rollback') {
@@ -564,9 +574,16 @@ class ProcessDatabaseImporter extends Process implements Module {
     protected function buildAnalysisActions() {
         $out = '<div class="uk-margin">';
 
-        // Import button (submits form with selected tables)
-        $out .= '<button type="submit" name="action" value="import" class="ui-button ui-priority-primary">';
-        $out .= '<i class="fa fa-upload"></i> ' . $this->_('Import Selected Tables');
+        // Dry Run button (recommended)
+        $out .= '<button type="submit" name="action" value="dry_run" class="ui-button ui-priority-primary">';
+        $out .= '<i class="fa fa-eye"></i> ' . $this->_('Preview Import (Dry Run)');
+        $out .= '</button>';
+
+        $out .= ' &nbsp; ';
+
+        // Direct import button (skip preview)
+        $out .= '<button type="submit" name="action" value="import" class="ui-button ui-priority-secondary">';
+        $out .= '<i class="fa fa-upload"></i> ' . $this->_('Import Now (Skip Preview)');
         $out .= '</button>';
 
         $out .= ' &nbsp; ';
@@ -575,6 +592,107 @@ class ProcessDatabaseImporter extends Process implements Module {
         $out .= '<a href="' . $this->page->url . '?action=clear" class="ui-button ui-priority-secondary">';
         $out .= '<i class="fa fa-arrow-left"></i> ' . $this->_('Start Over');
         $out .= '</a>';
+
+        $out .= '</div>';
+
+        return $out;
+    }
+
+    /**
+     * Build dry run confirmation screen
+     */
+    protected function buildDryRunConfirmation($dryRunResult) {
+        $out = '<div class="uk-container">';
+
+        // Success alert
+        $out .= '<div class="uk-alert uk-alert-success" style="margin: 20px 0;">';
+        $out .= '<h3 style="margin-top: 0;"><i class="fa fa-check-circle"></i> ' . $this->_('Dry Run Complete - Preview Results') . '</h3>';
+        $out .= '<p>' . $this->_('The following changes will be made when you execute the import:') . '</p>';
+        $out .= '</div>';
+
+        // Summary boxes
+        $out .= '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 20px 0;">';
+
+        // Templates count
+        $templateCount = count($dryRunResult['templates']);
+        $out .= '<div style="background: #f8f9fa; border-left: 4px solid #3B82F6; padding: 15px;">';
+        $out .= '<div style="font-size: 24px; font-weight: bold; color: #3B82F6;">' . $templateCount . '</div>';
+        $out .= '<div style="color: #666;">' . $this->_('Templates') . '</div>';
+        $out .= '</div>';
+
+        // Fields count
+        $fieldsCount = count($dryRunResult['fields']);
+        $out .= '<div style="background: #f8f9fa; border-left: 4px solid #10B981; padding: 15px;">';
+        $out .= '<div style="font-size: 24px; font-weight: bold; color: #10B981;">' . $fieldsCount . '</div>';
+        $out .= '<div style="color: #666;">' . $this->_('Fields') . '</div>';
+        $out .= '</div>';
+
+        // Pages count
+        $pagesCount = $dryRunResult['pages_count'];
+        $out .= '<div style="background: #f8f9fa; border-left: 4px solid #F59E0B; padding: 15px;">';
+        $out .= '<div style="font-size: 24px; font-weight: bold; color: #F59E0B;">' . number_format($pagesCount) . '</div>';
+        $out .= '<div style="color: #666;">' . $this->_('Pages') . '</div>';
+        $out .= '</div>';
+
+        // FK relationships count
+        $fkCount = count($dryRunResult['fk_relationships']);
+        $out .= '<div style="background: #f8f9fa; border-left: 4px solid #8B5CF6; padding: 15px;">';
+        $out .= '<div style="font-size: 24px; font-weight: bold; color: #8B5CF6;">' . $fkCount . '</div>';
+        $out .= '<div style="color: #666;">' . $this->_('FK Relationships') . '</div>';
+        $out .= '</div>';
+
+        $out .= '</div>';
+
+        // Details sections
+        $out .= '<div style="margin: 30px 0;">';
+
+        // Templates list
+        if (!empty($dryRunResult['templates'])) {
+            $out .= '<h4>' . $this->_('Templates to be created:') . '</h4>';
+            $out .= '<ul>';
+            foreach ($dryRunResult['templates'] as $template) {
+                $out .= '<li><code>' . $this->sanitizer->entities($template) . '</code></li>';
+            }
+            $out .= '</ul>';
+        }
+
+        // Pages breakdown per table
+        if (!empty($dryRunResult['tables_breakdown'])) {
+            $out .= '<h4>' . $this->_('Pages per table:') . '</h4>';
+            $out .= '<ul>';
+            foreach ($dryRunResult['tables_breakdown'] as $table => $count) {
+                $out .= '<li><strong>' . $this->sanitizer->entities($table) . '</strong>: ' . number_format($count) . ' ' . $this->_('pages') . '</li>';
+            }
+            $out .= '</ul>';
+        }
+
+        // FK relationships
+        if (!empty($dryRunResult['fk_relationships'])) {
+            $out .= '<h4>' . $this->_('Foreign Key Relationships:') . '</h4>';
+            $out .= '<ul>';
+            foreach ($dryRunResult['fk_relationships'] as $relationship) {
+                $out .= '<li>' . $this->sanitizer->entities($relationship) . '</li>';
+            }
+            $out .= '</ul>';
+        }
+
+        $out .= '</div>';
+
+        // Action buttons
+        $out .= '<form method="post" action="' . $this->page->url . '" style="margin: 30px 0;">';
+        $out .= '<input type="hidden" name="action" value="confirm_import">';
+
+        $out .= '<button type="submit" class="ui-button ui-priority-primary" style="font-size: 16px; padding: 10px 20px;">';
+        $out .= '<i class="fa fa-check"></i> ' . $this->_('Execute Import Now');
+        $out .= '</button>';
+
+        $out .= ' &nbsp; ';
+
+        $out .= '<a href="' . $this->page->url . '" class="ui-button ui-priority-secondary">';
+        $out .= '<i class="fa fa-arrow-left"></i> ' . $this->_('Back to Edit Configuration');
+        $out .= '</a>';
+
+        $out .= '</form>';
 
         $out .= '</div>';
 
@@ -628,6 +746,127 @@ class ProcessDatabaseImporter extends Process implements Module {
     }
 
     /**
+     * Execute dry run (preview without actual import)
+     */
+    protected function executeDryRun() {
+        $this->headline('Database Import - Dry Run Preview');
+
+        // Get session data
+        $sessionData = $this->session->get(self::SESSION_KEY);
+        if (!$sessionData || !isset($sessionData['analysis'])) {
+            $this->error($this->_('No analysis data found. Please start over.'));
+            $this->session->redirect($this->page->url);
+        }
+
+        // Get all tables data
+        $allAnalysis = $sessionData['analysis'] ?? [];
+        $allTables = $sessionData['tables'] ?? [];
+
+        if (empty($allAnalysis) || empty($allTables)) {
+            $this->error($this->_('No table data found in session. Please start over.'));
+            $this->session->redirect($this->page->url);
+        }
+
+        // Get selected tables
+        $selectedTables = $sessionData['selected_tables'] ?? array_keys($allAnalysis);
+
+        if (empty($selectedTables)) {
+            $this->error($this->_('No tables selected for import.'));
+            $this->session->redirect($this->page->url);
+        }
+
+        // Get FK mappings
+        $fkMappings = $sessionData['fk_mappings'] ?? [];
+
+        // Sort tables by dependencies
+        if (!empty($fkMappings)) {
+            $sortedTables = $this->sortTablesByDependencies($selectedTables, $fkMappings);
+            $selectedTables = $sortedTables;
+        }
+
+        // Dry run analysis
+        $dryRunResult = [
+            'templates' => [],
+            'fields' => [],
+            'pages_count' => 0,
+            'tables_breakdown' => [],
+            'fk_relationships' => []
+        ];
+
+        $maxRows = $sessionData['max_rows'] ?? 0;
+
+        foreach ($selectedTables as $tableName) {
+            $analysis = $allAnalysis[$tableName] ?? null;
+            $tableData = $allTables[$tableName] ?? null;
+
+            if (!$analysis || !$tableData) {
+                continue;
+            }
+
+            // Create mapping to see what would be created
+            $mappingEngine = $this->wire(new MappingEngine());
+            $mapping = $mappingEngine->createMapping($analysis, $tableName);
+
+            // Apply field filtering
+            if (isset($sessionData['selected_fields'])) {
+                $selectedFields = $sessionData['selected_fields'][$tableName] ?? [];
+                $filteredFields = [];
+                foreach ($mapping['fields'] as $columnName => $fieldMapping) {
+                    if (in_array($columnName, $selectedFields) || $columnName === $mapping['title_field']) {
+                        $filteredFields[$columnName] = $fieldMapping;
+                    }
+                }
+                $mapping['fields'] = $filteredFields;
+            }
+
+            // Apply fieldtype overrides
+            if (isset($sessionData['fieldtype_overrides'][$tableName])) {
+                $overrides = $sessionData['fieldtype_overrides'][$tableName];
+                foreach ($mapping['fields'] as $fieldName => $fieldMapping) {
+                    $sourceColumn = $fieldMapping['source_column'];
+                    if (isset($overrides[$sourceColumn])) {
+                        $mapping['fields'][$fieldName]['fieldtype'] = $overrides[$sourceColumn];
+                    }
+                }
+            }
+
+            // Count what would be created
+            $dryRunResult['templates'][] = $mapping['template'];
+
+            foreach ($mapping['fields'] as $fieldMapping) {
+                $fieldName = $fieldMapping['target_field'];
+                if (!in_array($fieldName, $dryRunResult['fields'])) {
+                    $dryRunResult['fields'][] = $fieldName;
+                }
+            }
+
+            // Count pages that would be imported
+            $importData = $tableData['data'];
+            if ($maxRows > 0 && count($importData) > $maxRows) {
+                $importData = array_slice($importData, 0, $maxRows);
+            }
+            $pageCount = count($importData);
+            $dryRunResult['pages_count'] += $pageCount;
+            $dryRunResult['tables_breakdown'][$tableName] = $pageCount;
+
+            // Count FK relationships
+            if (isset($fkMappings[$tableName])) {
+                foreach ($fkMappings[$tableName] as $column => $refTable) {
+                    $dryRunResult['fk_relationships'][] = "{$tableName}.{$column} → {$refTable}";
+                }
+            }
+        }
+
+        // Save dry run result to session
+        $sessionData['dry_run_result'] = $dryRunResult;
+        $sessionData['dry_run_completed'] = true;
+        $this->session->set(self::SESSION_KEY, $sessionData);
+
+        // Show confirmation screen
+        return $this->buildDryRunConfirmation($dryRunResult);
+    }
+
+    /**
      * Execute import process
      */
     protected function executeImport() {
@@ -639,6 +878,11 @@ class ProcessDatabaseImporter extends Process implements Module {
             $this->error($this->_('No analysis data found. Please start over.'));
             $this->session->redirect($this->page->url);
         }
+
+        // Clear dry run flags (we're doing actual import now)
+        unset($sessionData['dry_run_result']);
+        unset($sessionData['dry_run_completed']);
+        $this->session->set(self::SESSION_KEY, $sessionData);
 
         // Get all tables data
         $allAnalysis = $sessionData['analysis'] ?? [];
