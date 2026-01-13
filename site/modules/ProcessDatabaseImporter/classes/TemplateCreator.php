@@ -380,7 +380,7 @@ $records = $page->children("template={DETAIL_TEMPLATE}");
 
 $content = '';
 
-$content .= '<div style="padding: 40px">';
+$content .= '<div style="padding: 7rem 4rem 4rem">';
 $content .= '<h1>' . $page->title . '</h1>';
 
 $content .= '<div class="debug-info" style="background: #f0f0f0; padding: 15px; margin: 20px 0; border-radius: 4px;">';
@@ -592,7 +592,7 @@ PHP;
 
 \$content = '';
 
-\$content .= '<div style="padding: 40px">';
+\$content .= '<div style="padding: 7rem 4rem 4rem">';
 \$content .= '<h1>' . \$title . '</h1>';
 
 // ===================================================================
