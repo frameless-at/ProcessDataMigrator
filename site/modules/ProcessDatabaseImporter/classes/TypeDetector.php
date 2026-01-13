@@ -90,7 +90,17 @@ class TypeDetector extends WireData {
             ];
         }
 
+        // CRITICAL: For non-SQL parsers (CSV, JSON, XML), base_type is always 'string'
+        // We MUST analyze the actual values to determine the real type
         $baseType = $columnInfo['base_type'] ?? 'string';
+
+        // If base_type is 'string', try to detect the real type from values
+        if ($baseType === 'string') {
+            $detectedType = $this->detectTypeFromValues($values);
+            if ($detectedType !== 'string') {
+                $baseType = $detectedType;
+            }
+        }
 
         // Check for boolean/checkbox first (before options detection)
         $booleanResult = $this->detectBooleanField($columnName, $columnInfo, $values);
@@ -160,6 +170,93 @@ class TypeDetector extends WireData {
         }
 
         return $result;
+    }
+
+    /**
+     * Detect base type from actual values
+     * CENTRAL type detection for all parsers (CSV, JSON, XML, SQL)
+     *
+     * @param array $values Sample values
+     * @return string Base type: 'integer', 'float', 'date', 'datetime', 'boolean', or 'string'
+     */
+    protected function detectTypeFromValues($values) {
+        $nonEmpty = array_filter($values, function($v) {
+            return $v !== null && $v !== '';
+        });
+
+        if (empty($nonEmpty)) {
+            return 'string';
+        }
+
+        $intCount = 0;
+        $floatCount = 0;
+        $boolCount = 0;
+        $dateCount = 0;
+        $datetimeCount = 0;
+        $total = count($nonEmpty);
+
+        foreach ($nonEmpty as $value) {
+            // Check datetime first (more specific than date)
+            if (preg_match('/^\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}$/', $value)) {
+                $datetimeCount++;
+                continue;
+            }
+
+            // Check date (ISO format)
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
+                $dateCount++;
+                continue;
+            }
+
+            // Check boolean (must be exact match)
+            if ($value === '0' || $value === '1' ||
+                $value === 'true' || $value === 'false' ||
+                $value === true || $value === false ||
+                $value === 0 || $value === 1) {
+                $boolCount++;
+                continue;
+            }
+
+            // Check numeric types
+            if (is_numeric($value)) {
+                // Check integer
+                if ((int)$value == $value) {
+                    $intCount++;
+                    continue;
+                }
+                // Check float
+                if (is_float($value + 0)) {
+                    $floatCount++;
+                    continue;
+                }
+            }
+        }
+
+        // Determine type based on what matched
+        // Require at least 80% of values to match for confidence
+        $threshold = $total * 0.8;
+
+        if ($datetimeCount >= $threshold) {
+            return 'datetime';
+        }
+
+        if ($dateCount >= $threshold) {
+            return 'date';
+        }
+
+        if ($intCount >= $threshold) {
+            return 'integer';
+        }
+
+        if ($floatCount >= $threshold || ($intCount + $floatCount) >= $threshold) {
+            return 'float';
+        }
+
+        if ($boolCount >= $threshold && count(array_unique($nonEmpty)) <= 2) {
+            return 'boolean';
+        }
+
+        return 'string';
     }
 
     /**

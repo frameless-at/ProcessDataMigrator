@@ -122,19 +122,12 @@ class XmlParser extends AbstractParser {
         $totalRecords = count($records);
 
         // Build structure
-        // Analyze each column to detect base type
         $structure = [];
         foreach ($allKeys as $columnName) {
-            // Collect values for this column
-            $columnValues = array_column($data, $columnName);
-
-            // Detect base type from actual data
-            $baseType = $this->detectBaseType($columnValues);
-
             $structure[$columnName] = [
                 'name' => $columnName,
-                'type' => $baseType,
-                'base_type' => $baseType,
+                'type' => 'string',
+                'base_type' => 'string',
                 'nullable' => true,
                 'auto_increment' => false,
                 'default' => null,

@@ -162,19 +162,12 @@ class JsonParser extends AbstractParser {
         }
 
         // Build structure
-        // Analyze each column to detect base type
         $structure = [];
         foreach ($allKeys as $columnName) {
-            // Collect values for this column from flattened data
-            $columnValues = array_column($flattenedData, $columnName);
-
-            // Detect base type from actual data
-            $baseType = $this->detectBaseType($columnValues);
-
             $structure[$columnName] = [
                 'name' => $columnName,
-                'type' => $baseType,
-                'base_type' => $baseType,
+                'type' => 'string',
+                'base_type' => 'string',
                 'nullable' => true,
                 'auto_increment' => false,
                 'default' => null,

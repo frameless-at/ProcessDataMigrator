@@ -143,19 +143,12 @@ class CsvParser extends AbstractParser {
         fclose($handle);
 
         // Build table structure from data
-        // Analyze each column to detect base type
         $structure = [];
         foreach ($headers as $columnName) {
-            // Collect values for this column
-            $columnValues = array_column($data, $columnName);
-
-            // Detect base type from actual data
-            $baseType = $this->detectBaseType($columnValues);
-
             $structure[$columnName] = [
                 'name' => $columnName,
-                'type' => $baseType,
-                'base_type' => $baseType,
+                'type' => 'string',
+                'base_type' => 'string',
                 'nullable' => true,
                 'auto_increment' => false,
                 'default' => null,
