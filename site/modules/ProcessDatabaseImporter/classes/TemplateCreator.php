@@ -366,87 +366,78 @@ class TemplateCreator extends WireData {
  *
  * Overview page for {TABLE_NAME} records
  * Lists all child pages of this parent
+ *
+ * This template uses the delayed output method.
+ * Content is collected in $content variable and rendered by _main.php
  */
 
 // Get all children (individual records)
 $records = $page->children("template={DETAIL_TEMPLATE}");
-?>
-<!DOCTYPE html>
-<html>
-<head>
-    <title><?= $page->title ?></title>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 20px; }
-        h1 { color: #333; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
-        th { background-color: #f5f5f5; font-weight: 600; }
-        tr:hover { background-color: #f9f9f9; }
-        a { color: #0066cc; text-decoration: none; }
-        a:hover { text-decoration: underline; }
-        .debug-info { background: #f0f0f0; padding: 15px; margin: 20px 0; border-radius: 4px; }
-        code { background: #e0e0e0; padding: 2px 6px; border-radius: 3px; font-family: 'Courier New', monospace; }
-    </style>
-</head>
-<body>
-    <h1><?= $page->title ?></h1>
 
-    <div class="debug-info">
-        <strong>Template:</strong> <code><?= $page->template->name ?></code><br>
-        <strong>Total Records:</strong> <?= $records->count ?><br>
-        <strong>Detail Template:</strong> <code>{DETAIL_TEMPLATE}</code>
-    </div>
+// =============================================================================
+// BUILD CONTENT (collected in $content variable for _main.php)
+// =============================================================================
 
-    <?php if ($records->count): ?>
-        <h2>All {TEMPLATE_NAME_DISPLAY}</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>Title</th>
-                    <th>Fields</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php foreach ($records as $record): ?>
-                <tr>
-                    <td><?= $record->id ?></td>
-                    <td><strong><?= $record->title ?></strong></td>
-                    <td>
-                        <?php
-                        // Show first 3 field values inline (skip title)
-                        $sampleFields = [];
-                        $count = 0;
-                        foreach ($record->template->fields as $field) {
-                            if ($field->name !== 'title' && $count < 3) {
-                                $value = $record->get($field->name);
-                                if ($value && !is_object($value)) {
-                                    // Truncate long values
-                                    $displayValue = strlen($value) > 30 ? substr($value, 0, 30) . '...' : $value;
-                                    $sampleFields[] = "<em>{$field->name}:</em> {$displayValue}";
-                                    $count++;
-                                }
-                            }
-                        }
-                        echo implode(' | ', $sampleFields);
-                        if (count($record->template->fields) > 4) echo ' ...';
-                        ?>
-                    </td>
-                    <td>
-                        <a href="<?= $record->url ?>">View Details</a>
-                    </td>
-                </tr>
-                <?php endforeach; ?>
-            </tbody>
-        </table>
-    <?php else: ?>
-        <p>No records found.</p>
-    <?php endif; ?>
+$content = '';
 
-    <!-- TODO: Add your custom list view code here -->
-</body>
-</html>
+$content .= '<h1>' . $page->title . '</h1>';
+
+$content .= '<div class="debug-info" style="background: #f0f0f0; padding: 15px; margin: 20px 0; border-radius: 4px;">';
+$content .= '<strong>Template:</strong> <code>' . $page->template->name . '</code><br>';
+$content .= '<strong>Total Records:</strong> ' . $records->count . '<br>';
+$content .= '<strong>Detail Template:</strong> <code>{DETAIL_TEMPLATE}</code>';
+$content .= '</div>';
+
+if ($records->count) {
+    $content .= '<h2>All {TEMPLATE_NAME_DISPLAY}</h2>';
+    $content .= '<table style="width: 100%; border-collapse: collapse; margin-top: 20px;">';
+    $content .= '<thead>';
+    $content .= '<tr>';
+    $content .= '<th style="padding: 12px; text-align: left; border-bottom: 1px solid #ddd; background-color: #f5f5f5;">ID</th>';
+    $content .= '<th style="padding: 12px; text-align: left; border-bottom: 1px solid #ddd; background-color: #f5f5f5;">Title</th>';
+    $content .= '<th style="padding: 12px; text-align: left; border-bottom: 1px solid #ddd; background-color: #f5f5f5;">Fields</th>';
+    $content .= '<th style="padding: 12px; text-align: left; border-bottom: 1px solid #ddd; background-color: #f5f5f5;">Actions</th>';
+    $content .= '</tr>';
+    $content .= '</thead>';
+    $content .= '<tbody>';
+
+    foreach ($records as $record) {
+        $content .= '<tr>';
+        $content .= '<td style="padding: 12px; border-bottom: 1px solid #ddd;">' . $record->id . '</td>';
+        $content .= '<td style="padding: 12px; border-bottom: 1px solid #ddd;"><strong>' . $record->title . '</strong></td>';
+        $content .= '<td style="padding: 12px; border-bottom: 1px solid #ddd;">';
+
+        // Show first 3 field values inline (skip title)
+        $sampleFields = [];
+        $count = 0;
+        foreach ($record->template->fields as $field) {
+            if ($field->name !== 'title' && $count < 3) {
+                $value = $record->get($field->name);
+                if ($value && !is_object($value)) {
+                    // Truncate long values
+                    $displayValue = strlen($value) > 30 ? substr($value, 0, 30) . '...' : $value;
+                    $sampleFields[] = "<em>{$field->name}:</em> {$displayValue}";
+                    $count++;
+                }
+            }
+        }
+        $content .= implode(' | ', $sampleFields);
+        if (count($record->template->fields) > 4) $content .= ' ...';
+
+        $content .= '</td>';
+        $content .= '<td style="padding: 12px; border-bottom: 1px solid #ddd;">';
+        $content .= '<a href="' . $record->url . '">View Details</a>';
+        $content .= '</td>';
+        $content .= '</tr>';
+    }
+
+    $content .= '</tbody>';
+    $content .= '</table>';
+} else {
+    $content .= '<p>No records found.</p>';
+}
+
+// TODO: Add your custom list view code here
 PHP;
 
         // Replace placeholders
@@ -571,6 +562,9 @@ PHP;
 /**
  * Template: {$templateName}
  * Source Table: {$tableName}
+ *
+ * This template uses the delayed output method.
+ * Content is collected in \$content variable and rendered by _main.php
  */
 
 // =============================================================================
@@ -589,52 +583,48 @@ PHP;
 // LOAD RELATED DATA (FK Relationships)
 // =============================================================================
 
-?>
-<!DOCTYPE html>
-<html>
-<head>
-    <title><?= \$title ?></title>
-    <meta charset="utf-8">
-</head>
-<body>
-    <h1><?= \$title ?></h1>
+// =============================================================================
+// BUILD CONTENT (collected in \$content variable for _main.php)
+// =============================================================================
 
-    <!-- =================================================================== -->
-    <!-- ALL FIELDS DISPLAYED - Remove/customize what you don't need        -->
-    <!-- =================================================================== -->
+\$content = '';
 
-    <section class="basic-info">
-        <h2>{$tableName} Information</h2>
+\$content .= '<h1>' . \$title . '</h1>';
 
-        {$htmlFields}{$fkFieldsHtml}
-    </section>
+// ===================================================================
+// ALL FIELDS DISPLAYED - Remove/customize what you don't need
+// ===================================================================
 
-    <!-- =================================================================== -->
-    <!-- RELATED DATA - FK Relationships                                    -->
-    <!-- =================================================================== -->
+\$content .= '<section class="basic-info">';
+\$content .= '<h2>{$tableName} Information</h2>';
 
-    <!-- =================================================================== -->
-    <!-- DEBUG: Show all raw field values (remove in production)            -->
-    <!-- =================================================================== -->
-    <?php if(\$config->debug): ?>
-    <details style="margin-top: 40px; padding: 20px; background: #f5f5f5; border-radius: 4px;">
-        <summary style="cursor: pointer; font-weight: bold;">🔍 Debug: All Field Values</summary>
-        <pre style="margin-top: 10px; background: white; padding: 15px; overflow: auto;"><?php
-            echo "Page ID: {\$page->id}\\n";
-            echo "Template: {\$page->template->name}\\n\\n";
-            echo "FIELDS:\\n";
-            foreach(\$page->template->fields as \$field) {
-                \$value = \$page->get(\$field->name);
-                echo "  {\$field->name} ({\$field->type}): ";
-                echo is_object(\$value) ? get_class(\$value) : var_export(\$value, true);
-                echo "\\n";
-            }
-        ?></pre>
-    </details>
-    <?php endif; ?>
+{$htmlFields}{$fkFieldsHtml}
 
-</body>
-</html>
+\$content .= '</section>';
+
+// ===================================================================
+// RELATED DATA - FK Relationships
+// ===================================================================
+
+// ===================================================================
+// DEBUG: Show all raw field values (remove in production)
+// ===================================================================
+if(\$config->debug) {
+    \$content .= '<details style="margin-top: 40px; padding: 20px; background: #f5f5f5; border-radius: 4px;">';
+    \$content .= '<summary style="cursor: pointer; font-weight: bold;">🔍 Debug: All Field Values</summary>';
+    \$content .= '<pre style="margin-top: 10px; background: white; padding: 15px; overflow: auto;">';
+    \$content .= "Page ID: {\$page->id}\\n";
+    \$content .= "Template: {\$page->template->name}\\n\\n";
+    \$content .= "FIELDS:\\n";
+    foreach(\$page->template->fields as \$field) {
+        \$value = \$page->get(\$field->name);
+        \$content .= "  {\$field->name} ({\$field->type}): ";
+        \$content .= is_object(\$value) ? get_class(\$value) : var_export(\$value, true);
+        \$content .= "\\n";
+    }
+    \$content .= '</pre>';
+    \$content .= '</details>';
+}
 PHP;
     }
 
@@ -709,35 +699,35 @@ PHP;
         // Special handling for textareas (use nl2br)
         if ($fieldtype === 'FieldtypeTextarea') {
             return <<<HTML
-<?php if(\${$varName}): ?>
-        <p><strong>{$safeLabel}:</strong><br><?= nl2br(\${$varName}) ?></p>
-        <?php endif; ?>
+if(\${$varName}) {
+    \$content .= '<p><strong>{$safeLabel}:</strong><br>' . nl2br(\${$varName}) . '</p>';
+}
 HTML;
         }
 
         // Email fields get mailto link
         if ($fieldtype === 'FieldtypeEmail') {
             return <<<HTML
-<?php if(\${$varName}): ?>
-        <p><strong>{$safeLabel}:</strong> <a href="mailto:<?= \${$varName} ?>"><?= \${$varName} ?></a></p>
-        <?php endif; ?>
+if(\${$varName}) {
+    \$content .= '<p><strong>{$safeLabel}:</strong> <a href="mailto:' . \${$varName} . '">' . \${$varName} . '</a></p>';
+}
 HTML;
         }
 
         // URL fields get link
         if ($fieldtype === 'FieldtypeURL') {
             return <<<HTML
-<?php if(\${$varName}): ?>
-        <p><strong>{$safeLabel}:</strong> <a href="<?= \${$varName} ?>" target="_blank"><?= \${$varName} ?></a></p>
-        <?php endif; ?>
+if(\${$varName}) {
+    \$content .= '<p><strong>{$safeLabel}:</strong> <a href="' . \${$varName} . '" target="_blank">' . \${$varName} . '</a></p>';
+}
 HTML;
         }
 
         // Default output
         return <<<HTML
-<?php if(\${$varName}): ?>
-        <p><strong>{$safeLabel}:</strong> <?= \${$varName} ?></p>
-        <?php endif; ?>
+if(\${$varName}) {
+    \$content .= '<p><strong>{$safeLabel}:</strong> ' . \${$varName} . '</p>';
+}
 HTML;
     }
 
@@ -750,11 +740,11 @@ HTML;
 
         return <<<HTML
 
-<?php if(\${$pageVarName} && \${$pageVarName}->id): ?>
-        <p><strong>{$safeLabel}:</strong>
-            <a href="<?= \${$pageVarName}->url ?>"><?= \${$pageVarName}->title ?></a>
-        </p>
-        <?php endif; ?>
+if(\${$pageVarName} && \${$pageVarName}->id) {
+    \$content .= '<p><strong>{$safeLabel}:</strong> ';
+    \$content .= '<a href="' . \${$pageVarName}->url . '">' . \${$pageVarName}->title . '</a>';
+    \$content .= '</p>';
+}
 HTML;
     }
 
