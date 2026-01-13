@@ -4,6 +4,9 @@ namespace ProcessWire;
 
 require_once(__DIR__ . '/classes/parsers/AbstractParser.php');
 require_once(__DIR__ . '/classes/parsers/SqlParser.php');
+require_once(__DIR__ . '/classes/parsers/CsvParser.php');
+require_once(__DIR__ . '/classes/parsers/JsonParser.php');
+require_once(__DIR__ . '/classes/parsers/XmlParser.php');
 require_once(__DIR__ . '/classes/DataAnalyzer.php');
 require_once(__DIR__ . '/classes/TypeDetector.php');
 require_once(__DIR__ . '/classes/MappingEngine.php');
@@ -181,15 +184,16 @@ class ProcessDatabaseImporter extends Process implements Module {
                 $this->error($this->_('File upload failed'));
             } else if ($file['size'] === 0) {
                 $this->error($this->_('File is empty'));
-            } else if (!preg_match('/\.sql$/i', $file['name'])) {
-                $this->error($this->_('Only .sql files are allowed'));
+            } else if (!preg_match('/\.(sql|csv|json|xml)$/i', $file['name'])) {
+                $this->error($this->_('Only .sql, .csv, .json, and .xml files are allowed'));
             } else {
                 // Get form field values
                 $sampleSize = (int) $form->get('sample_size')->value;
                 $maxRows = (int) $form->get('max_rows')->value;
 
-                // Move to temp location
-                $tempFile = $this->uploadsPath . uniqid('import_') . '.sql';
+                // Move to temp location - preserve original extension
+                $extension = pathinfo($file['name'], PATHINFO_EXTENSION);
+                $tempFile = $this->uploadsPath . uniqid('import_') . '.' . $extension;
                 if (move_uploaded_file($file['tmp_name'], $tempFile)) {
                     // Process the file
                     $result = $this->processUpload($tempFile, $sampleSize, $maxRows);
@@ -254,12 +258,12 @@ class ProcessDatabaseImporter extends Process implements Module {
 
         // File upload - using Markup instead of InputfieldFile
         $f = $this->modules->get('InputfieldMarkup');
-        $f->label = $this->_('Upload Database File');
-        $f->description = $this->_('Upload a SQL dump file to analyze and import');
+        $f->label = $this->_('Upload Data File');
+        $f->description = $this->_('Upload a data file to analyze and import');
 
         $fileInput = '<div class="InputfieldContent">';
-        $fileInput .= '<input type="file" name="sql_file" accept=".sql" required>';
-        $fileInput .= '<p class="description">' . $this->_('Only .sql files are accepted') . '</p>';
+        $fileInput .= '<input type="file" name="sql_file" accept=".sql,.csv,.json,.xml" required>';
+        $fileInput .= '<p class="description">' . $this->_('Supported formats: SQL, CSV, JSON, XML') . '</p>';
         $fileInput .= '</div>';
 
         $f->value = $fileInput;
@@ -305,13 +309,13 @@ class ProcessDatabaseImporter extends Process implements Module {
      * Process uploaded file
      */
     protected function processUpload($filePath, $sampleSize = 100, $maxRows = 0) {
-        // Initialize parser
-        $parser = new SqlParser();
+        // Detect and initialize appropriate parser
+        $parser = $this->detectParser($filePath);
 
-        if (!$parser->canParse($filePath)) {
+        if (!$parser) {
             return [
                 'success' => false,
-                'error' => 'File format not supported or invalid SQL file'
+                'error' => 'File format not supported. Supported formats: SQL, CSV, JSON, XML'
             ];
         }
 
@@ -327,7 +331,7 @@ class ProcessDatabaseImporter extends Process implements Module {
             if (empty($tables)) {
                 return [
                     'success' => false,
-                    'error' => 'No tables found in SQL file'
+                    'error' => 'No data found in file'
                 ];
             }
 
@@ -353,6 +357,34 @@ class ProcessDatabaseImporter extends Process implements Module {
                 'error' => 'Error parsing file: ' . $e->getMessage()
             ];
         }
+    }
+
+    /**
+     * Detect and return appropriate parser for file
+     *
+     * @param string $filePath Path to file
+     * @return AbstractParser|null Parser instance or null if no suitable parser found
+     */
+    protected function detectParser($filePath) {
+        // List of available parsers in priority order
+        $parsers = [
+            new CsvParser(),
+            new JsonParser(),
+            new XmlParser(),
+            new SqlParser(),
+        ];
+
+        // Try each parser
+        foreach ($parsers as $parser) {
+            if ($parser->canParse($filePath)) {
+                $parserName = get_class($parser);
+                $parserName = str_replace('ProcessWire\\', '', $parserName);
+                $this->message($this->_("Using parser: {$parserName}"));
+                return $parser;
+            }
+        }
+
+        return null;
     }
 
     /**
