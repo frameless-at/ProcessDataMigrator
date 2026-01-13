@@ -11,15 +11,17 @@ class TypeDetector extends WireData {
      * Pattern definitions for type detection
      */
     protected $patterns = [
+        // CRITICAL: Order matters! More specific patterns MUST come first
+        // Date patterns BEFORE phone patterns (dates can match phone regex)
         'email' => '/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/i',
         'url' => '/^https?:\/\/.+/i',
-        'phone_de' => '/^(\+49|0)[0-9\s\-\/()]{7,}$/',
-        'phone_intl' => '/^\+?[0-9\s\-\/()]{7,}$/',
         'date_iso' => '/^\d{4}-\d{2}-\d{2}$/',
         'date_de' => '/^\d{2}\.\d{2}\.\d{4}$/',
         'date_us' => '/^\d{2}\/\d{2}\/\d{4}$/',
         'datetime_iso' => '/^\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}$/',
         'time' => '/^\d{2}:\d{2}(:\d{2})?$/',
+        'phone_de' => '/^(\+49|0)[0-9\s\-\/()]{7,}$/',
+        'phone_intl' => '/^\+?[0-9\s\(\)]{7,}$/',  // More restrictive: no dashes, requires + or spaces/parens
         'html' => '/<[a-z][\s\S]*>/i',
         'json' => '/^[\{\[].*[\}\]]$/s',
         'image_url' => '/\.(jpg|jpeg|png|gif|webp|svg)$/i',
