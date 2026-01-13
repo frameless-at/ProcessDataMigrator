@@ -500,7 +500,16 @@ PHP;
         // Build FK query examples
         $fkQueries = [];
         foreach ($fkRelationships as $columnName => $refTable) {
-            $fkQueries[] = $this->buildFkQueryExample($columnName, $refTable);
+            // Find the ProcessWire field name (target_field) for this column
+            $pwFieldName = null;
+            if (isset($mapping['fields'][$columnName])) {
+                $pwFieldName = $mapping['fields'][$columnName]['target_field'];
+            }
+
+            // Only generate FK query if we found the field mapping
+            if ($pwFieldName) {
+                $fkQueries[] = $this->buildFkQueryExample($pwFieldName, $refTable, $columnName);
+            }
         }
         $fkQueriesCode = !empty($fkQueries) ? "\n" . implode("\n", $fkQueries) : '';
 
@@ -581,14 +590,19 @@ PHP;
 
     /**
      * Build FK query example code
+     *
+     * @param string $pwFieldName ProcessWire field name (e.g., "orders_customer_id")
+     * @param string $refTable Reference table name (e.g., "customers")
+     * @param string $sourceColumn Original SQL column name for documentation (e.g., "customer_id")
+     * @return string PHP code
      */
-    protected function buildFkQueryExample($columnName, $refTable) {
+    protected function buildFkQueryExample($pwFieldName, $refTable, $sourceColumn) {
         return <<<PHP
 
     <!-- Related Pages: {$refTable} -->
     <?php
-    // Find pages that reference this record via {$columnName}
-    \$related{$refTable} = \$pages->find("template={$refTable}, {$columnName}={\$page->{$columnName}}");
+    // Find pages that reference this record via {$sourceColumn} field (PW field: {$pwFieldName})
+    \$related{$refTable} = \$pages->find("template={$refTable}, {$pwFieldName}={\$page->{$pwFieldName}}");
     if(\$related{$refTable}->count): ?>
         <div class="related">
             <h2>{$refTable}</h2>
