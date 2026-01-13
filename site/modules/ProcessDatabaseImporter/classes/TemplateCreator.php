@@ -480,6 +480,9 @@ PHP;
         // Build HTML field outputs (all fields displayed)
         $htmlFieldOutputs = [];
 
+        // Track FK fields in this template for page object loading
+        $fkFieldsInTemplate = [];
+
         foreach ($mapping['fields'] as $columnName => $fieldMapping) {
             $fieldName = $fieldMapping['target_field'];
             $fieldtype = $fieldMapping['fieldtype'];
@@ -489,50 +492,79 @@ PHP;
             // Quick Reference comment
             $label = $this->sanitizeLabel($sourceColumn);
             $padding = str_repeat(' ', max(0, 30 - strlen("\$page->{$fieldName}")));
-            $quickRefLines[] = "// \$page->{$fieldName}{$padding}// {$phpType}     - {$label} ({$fieldtype})";
+
+            // Check if this field is an FK field
+            $isFkField = isset($fkRelationships[$columnName]);
+            $fkComment = $isFkField ? " (FK → {$fkRelationships[$columnName]})" : "";
+
+            $quickRefLines[] = "// \$page->{$fieldName}{$padding}// {$phpType}     - {$label} ({$fieldtype}){$fkComment}";
 
             // Quick Access variable
             $varName = $this->generateVarName($sourceColumn);
-            $conversion = $this->getValueConversion($fieldName, $fieldtype);
-            $quickAccessVars[] = "\${$varName} = {$conversion};";
 
-            // HTML output
-            $htmlFieldOutputs[] = $this->buildEnhancedFieldOutput($varName, $label, $fieldtype);
+            // If this is an FK field, track it for page object loading
+            if ($isFkField) {
+                $refTable = $fkRelationships[$columnName];
+                $fkFieldsInTemplate[$varName] = [
+                    'fieldName' => $fieldName,
+                    'refTable' => $refTable,
+                    'columnName' => $columnName
+                ];
+
+                // Just store the ID for now
+                $quickAccessVars[] = "\${$varName}Id = \$page->{$fieldName};";
+            } else {
+                $conversion = $this->getValueConversion($fieldName, $fieldtype);
+                $quickAccessVars[] = "\${$varName} = {$conversion};";
+            }
+
+            // HTML output (will be handled differently for FK fields)
+            if (!$isFkField) {
+                $htmlFieldOutputs[] = $this->buildEnhancedFieldOutput($varName, $label, $fieldtype);
+            }
         }
 
-        // Build FK relationships section
-        $fkRefLines = [];
-        $fkLoadCode = [];
+        // Generate FK page object lookups
+        $fkObjectLoads = [];
         $fkHtmlOutputs = [];
 
-        foreach ($fkRelationships as $columnName => $refTable) {
-            $pwFieldName = null;
-            if (isset($mapping['fields'][$columnName])) {
-                $pwFieldName = $mapping['fields'][$columnName]['target_field'];
-            }
+        foreach ($fkFieldsInTemplate as $varName => $fkInfo) {
+            $refTable = $fkInfo['refTable'];
+            $pageVarName = $varName; // e.g., "customer"
 
-            if ($pwFieldName) {
-                $varName = $this->generateVarName($columnName);
-                $fkRefLines[] = "// {$refTable}.{$columnName} → {$tableName}.{$columnName} (find {$refTable} for this {$tableName})";
+            $fkObjectLoads[] = "// Load referenced {$refTable} page";
+            $fkObjectLoads[] = "\${$pageVarName} = \${$varName}Id ? \$pages->get(\${$varName}Id) : null;";
+            $fkObjectLoads[] = "";
 
-                // Pre-load FK data
-                $relatedVarName = 'related' . ucfirst($refTable);
-                $fkLoadCode[] = "// Find all {$refTable} that belong to this {$tableName}";
-                $fkLoadCode[] = "\${$relatedVarName} = \$pages->find(\"template={$refTable}, {$pwFieldName}={\${$varName}}\");";
-                $fkLoadCode[] = "";
-
-                // HTML output for related data
-                $fkHtmlOutputs[] = $this->buildFkHtmlOutput($relatedVarName, $refTable);
-            }
+            // Add HTML output for FK page object
+            $label = $this->sanitizeLabel($fkInfo['columnName']);
+            $fkHtmlOutputs[] = $this->buildFkPageObjectOutput($pageVarName, $label, $refTable);
         }
+
+        // Build reverse FK relationships section (pages that reference THIS page)
+        $reverseFkLines = [];
+        $reverseFkLoadCode = [];
+        $reverseFkHtmlOutputs = [];
+
+        // Find fields in OTHER templates that might reference this template
+        // (This is the reverse direction - e.g., find orders that belong to this customer)
+        // We need to look at which tables have FKs pointing to this table
+        foreach ($fkRelationships as $columnName => $refTable) {
+            // This is an FK in the CURRENT template, not a reverse FK
+            // Skip these as we already handled them above
+            continue;
+        }
+
+        // Note: Reverse FKs need to be passed separately if needed
+        // For now, we'll keep the existing reverse FK logic but it might be empty
+        // unless we change how FK relationships are passed to this method
 
         // Combine all sections
         $quickRef = implode("\n// ", $quickRefLines);
-        $fkRef = !empty($fkRefLines) ? "\n//\n// Foreign Keys:\n// " . implode("\n// ", $fkRefLines) : '';
         $quickAccess = implode("\n", $quickAccessVars);
-        $fkLoad = !empty($fkLoadCode) ? "\n// " . str_replace("\n", "\n// ", implode("\n", $fkLoadCode)) : '';
+        $fkObjects = !empty($fkObjectLoads) ? "\n" . implode("\n", $fkObjectLoads) : '';
         $htmlFields = implode("\n    ", $htmlFieldOutputs);
-        $fkHtml = !empty($fkHtmlOutputs) ? "\n    " . implode("\n    ", $fkHtmlOutputs) : '';
+        $fkFieldsHtml = !empty($fkHtmlOutputs) ? "\n    " . implode("\n    ", $fkHtmlOutputs) : '';
 
         return <<<PHP
 <?php namespace ProcessWire;
@@ -545,16 +577,15 @@ PHP;
 // AVAILABLE FIELDS - Quick Reference (copy & paste these)
 // =============================================================================
 //
-{$quickRef}{$fkRef}
+{$quickRef}
 //
 // =============================================================================
 
 // =============================================================================
 // QUICK ACCESS VARIABLES (optional - for cleaner template code)
 // =============================================================================
-{$quickAccess}
-
-// ============================================================================={$fkLoad}
+{$quickAccess}{$fkObjects}
+// =============================================================================
 // LOAD RELATED DATA (FK Relationships)
 // =============================================================================
 
@@ -575,12 +606,12 @@ PHP;
     <section class="basic-info">
         <h2>{$tableName} Information</h2>
 
-        {$htmlFields}
+        {$htmlFields}{$fkFieldsHtml}
     </section>
 
     <!-- =================================================================== -->
     <!-- RELATED DATA - FK Relationships                                    -->
-    <!-- =================================================================== -->{$fkHtml}
+    <!-- =================================================================== -->
 
     <!-- =================================================================== -->
     <!-- DEBUG: Show all raw field values (remove in production)            -->
@@ -711,7 +742,24 @@ HTML;
     }
 
     /**
-     * Build HTML output for FK relationships
+     * Build HTML output for FK page object (direct reference)
+     */
+    protected function buildFkPageObjectOutput($pageVarName, $label, $refTable) {
+        $safeLabel = htmlspecialchars($label);
+        $displayName = ucfirst($refTable);
+
+        return <<<HTML
+
+<?php if(\${$pageVarName} && \${$pageVarName}->id): ?>
+        <p><strong>{$safeLabel}:</strong>
+            <a href="<?= \${$pageVarName}->url ?>"><?= \${$pageVarName}->title ?></a>
+        </p>
+        <?php endif; ?>
+HTML;
+    }
+
+    /**
+     * Build HTML output for FK relationships (reverse direction)
      */
     protected function buildFkHtmlOutput($relatedVarName, $refTable) {
         $displayName = ucfirst($refTable);
