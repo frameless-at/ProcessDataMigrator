@@ -380,6 +380,7 @@ $records = $page->children("template={DETAIL_TEMPLATE}");
 
 $content = '';
 
+$content .= '<div style="padding: 40px">';
 $content .= '<h1>' . $page->title . '</h1>';
 
 $content .= '<div class="debug-info" style="background: #f0f0f0; padding: 15px; margin: 20px 0; border-radius: 4px;">';
@@ -436,6 +437,8 @@ if ($records->count) {
 } else {
     $content .= '<p>No records found.</p>';
 }
+
+$content .= '</div>'; // Close padding wrapper
 
 // TODO: Add your custom list view code here
 PHP;
@@ -589,6 +592,7 @@ PHP;
 
 \$content = '';
 
+\$content .= '<div style="padding: 40px">';
 \$content .= '<h1>' . \$title . '</h1>';
 
 // ===================================================================
@@ -625,6 +629,8 @@ if(\$config->debug) {
     \$content .= '</pre>';
     \$content .= '</details>';
 }
+
+\$content .= '</div>'; // Close padding wrapper
 PHP;
     }
 
