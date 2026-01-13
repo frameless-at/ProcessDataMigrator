@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<products>
+    <product id="101" featured="true">
+        <name>Wireless Bluetooth Headphones</name>
+        <sku>WBH-001</sku>
+        <category>Electronics</category>
+        <subcategory>Audio</subcategory>
+        <price>149.99</price>
+        <currency>USD</currency>
+        <stock>45</stock>
+        <weight>250</weight>
+        <weight_unit>grams</weight_unit>
+        <description>Premium wireless headphones with active noise cancellation and 30-hour battery life.</description>
+        <manufacturer>SoundTech</manufacturer>
+        <release_date>2024-03-15</release_date>
+        <rating>4.5</rating>
+        <reviews>328</reviews>
+    </product>
+    <product id="102" featured="false">
+        <name>Smart Fitness Tracker</name>
+        <sku>SFT-002</sku>
+        <category>Electronics</category>
+        <subcategory>Wearables</subcategory>
+        <price>159.50</price>
+        <currency>USD</currency>
+        <stock>120</stock>
+        <weight>35</weight>
+        <weight_unit>grams</weight_unit>
+        <description>Track your health and fitness with heart rate monitoring, GPS, and sleep tracking.</description>
+        <manufacturer>FitLife</manufacturer>
+        <release_date>2024-05-20</release_date>
+        <rating>4.3</rating>
+        <reviews>215</reviews>
+    </product>
+    <product id="103" featured="true">
+        <name>4K Webcam Pro</name>
+        <sku>4KW-003</sku>
+        <category>Electronics</category>
+        <subcategory>Computer Accessories</subcategory>
+        <price>449.99</price>
+        <currency>USD</currency>
+        <stock>28</stock>
+        <weight>180</weight>
+        <weight_unit>grams</weight_unit>
+        <description>Professional 4K webcam with AI-powered auto-framing and low-light correction.</description>
+        <manufacturer>VisionTech</manufacturer>
+        <release_date>2024-07-10</release_date>
+        <rating>4.7</rating>
+        <reviews>142</reviews>
+    </product>
+    <product id="104" featured="false">
+        <name>USB-C Multi-Port Hub</name>
+        <sku>UCH-004</sku>
+        <category>Electronics</category>
+        <subcategory>Computer Accessories</subcategory>
+        <price>29.99</price>
+        <currency>USD</currency>
+        <stock>200</stock>
+        <weight>95</weight>
+        <weight_unit>grams</weight_unit>
+        <description>7-in-1 USB-C hub with HDMI, USB 3.0 ports, SD card reader, and power delivery.</description>
+        <manufacturer>ConnectPlus</manufacturer>
+        <release_date>2024-02-05</release_date>
+        <rating>4.2</rating>
+        <reviews>567</reviews>
+    </product>
+    <product id="105" featured="true">
+        <name>Mechanical Gaming Keyboard</name>
+        <sku>MGK-005</sku>
+        <category>Electronics</category>
+        <subcategory>Gaming</subcategory>
+        <price>199.99</price>
+        <currency>USD</currency>
+        <stock>75</stock>
+        <weight>950</weight>
+        <weight_unit>grams</weight_unit>
+        <description>RGB mechanical keyboard with hot-swappable switches and programmable macros.</description>
+        <manufacturer>GameGear</manufacturer>
+        <release_date>2024-04-22</release_date>
+        <rating>4.6</rating>
+        <reviews>892</reviews>
+    </product>
+    <product id="106" featured="false">
+        <name>Wireless Charging Pad</name>
+        <sku>WCP-006</sku>
+        <category>Electronics</category>
+        <subcategory>Accessories</subcategory>
+        <price>179.99</price>
+        <currency>USD</currency>
+        <stock>150</stock>
+        <weight>145</weight>
+        <weight_unit>grams</weight_unit>
+        <description>Fast wireless charging for up to 3 devices simultaneously with intelligent power allocation.</description>
+        <manufacturer>ChargeTech</manufacturer>
+        <release_date>2024-06-12</release_date>
+        <rating>4.4</rating>
+        <reviews>423</reviews>
+    </product>
+    <product id="107" featured="true">
+        <name>Portable SSD 2TB</name>
+        <sku>SSD-007</sku>
+        <category>Electronics</category>
+        <subcategory>Storage</subcategory>
+        <price>599.99</price>
+        <currency>USD</currency>
+        <stock>60</stock>
+        <weight>85</weight>
+        <weight_unit>grams</weight_unit>
+        <description>Ultra-fast 2TB portable SSD with USB 3.2 Gen 2 and shock-resistant design.</description>
+        <manufacturer>DataVault</manufacturer>
+        <release_date>2024-08-05</release_date>
+        <rating>4.8</rating>
+        <reviews>734</reviews>
+    </product>
+    <product id="108" featured="false">
+        <name>HD LED Monitor 27 inch</name>
+        <sku>MON-008</sku>
+        <category>Electronics</category>
+        <subcategory>Monitors</subcategory>
+        <price>349.99</price>
+        <currency>USD</currency>
+        <stock>42</stock>
+        <weight>4500</weight>
+        <weight_unit>grams</weight_unit>
+        <description>27-inch Full HD monitor with IPS panel, 144Hz refresh rate, and HDR support.</description>
+        <manufacturer>PixelView</manufacturer>
+        <release_date>2024-09-18</release_date>
+        <rating>4.5</rating>
+        <reviews>256</reviews>
+    </product>
+    <product id="109" featured="true">
+        <name>Smart Home Hub</name>
+        <sku>SHH-009</sku>
+        <category>Electronics</category>
+        <subcategory>Smart Home</subcategory>
+        <price>129.99</price>
+        <currency>USD</currency>
+        <stock>95</stock>
+        <weight>320</weight>
+        <weight_unit>grams</weight_unit>
+        <description>Central hub for controlling all your smart home devices with voice commands and automation.</description>
+        <manufacturer>HomeAI</manufacturer>
+        <release_date>2024-10-08</release_date>
+        <rating>4.3</rating>
+        <reviews>478</reviews>
+    </product>
+    <product id="110" featured="false">
+        <name>Laptop Cooling Stand</name>
+        <sku>LCS-010</sku>
+        <category>Electronics</category>
+        <subcategory>Computer Accessories</subcategory>
+        <price>45.99</price>
+        <currency>USD</currency>
+        <stock>180</stock>
+        <weight>680</weight>
+        <weight_unit>grams</weight_unit>
+        <description>Adjustable laptop stand with built-in cooling fans and ergonomic design.</description>
+        <manufacturer>CoolDesk</manufacturer>
+        <release_date>2024-01-25</release_date>
+        <rating>4.1</rating>
+        <reviews>312</reviews>
+    </product>
+</products>

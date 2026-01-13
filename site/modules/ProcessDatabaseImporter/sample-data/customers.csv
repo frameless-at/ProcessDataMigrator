@@ -1,0 +1,11 @@
+id,first_name,last_name,email,phone,address,city,postal_code,country,registration_date,status
+1,John,Doe,john.doe@example.com,+1-555-0101,123 Main St,New York,10001,USA,2024-01-15,active
+2,Jane,Smith,jane.smith@example.com,+1-555-0102,456 Oak Ave,Los Angeles,90001,USA,2024-02-20,active
+3,Robert,Johnson,robert.j@example.com,+1-555-0103,789 Pine Rd,Chicago,60601,USA,2024-03-10,active
+4,Maria,Garcia,maria.garcia@example.com,+34-555-0104,Calle Mayor 45,Madrid,28013,Spain,2024-04-05,active
+5,Michael,Brown,m.brown@example.com,+44-555-0105,10 Downing St,London,SW1A 2AA,UK,2024-05-12,inactive
+6,Sarah,Wilson,sarah.wilson@example.com,+1-555-0106,321 Elm St,Boston,02101,USA,2024-06-18,active
+7,David,Martinez,d.martinez@example.com,+1-555-0107,654 Maple Dr,Houston,77001,USA,2024-07-22,active
+8,Lisa,Anderson,lisa.a@example.com,+49-555-0108,Hauptstraße 12,Berlin,10115,Germany,2024-08-30,active
+9,James,Taylor,james.taylor@example.com,+1-555-0109,987 Cedar Ln,Seattle,98101,USA,2024-09-14,active
+10,Emma,Thomas,emma.thomas@example.com,+33-555-0110,Rue de la Paix 5,Paris,75002,France,2024-10-01,active
