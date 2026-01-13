@@ -700,7 +700,55 @@ class ProcessDatabaseImporter extends Process implements Module {
     }
 
     /**
+     * Detect circular dependencies in dependency graph
+     * Returns array of nodes in cycle, or null if no cycle found
+     */
+    protected function detectCycle($dependencies) {
+        $visited = [];
+        $recursionStack = [];
+
+        foreach (array_keys($dependencies) as $node) {
+            if (!isset($visited[$node])) {
+                $cycle = $this->detectCycleDFS($node, $dependencies, $visited, $recursionStack, []);
+                if ($cycle !== null) {
+                    return $cycle;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * DFS helper for cycle detection
+     */
+    protected function detectCycleDFS($node, $dependencies, &$visited, &$recursionStack, $path) {
+        $visited[$node] = true;
+        $recursionStack[$node] = true;
+        $path[] = $node;
+
+        if (isset($dependencies[$node])) {
+            foreach ($dependencies[$node] as $neighbor) {
+                if (!isset($visited[$neighbor])) {
+                    $cycle = $this->detectCycleDFS($neighbor, $dependencies, $visited, $recursionStack, $path);
+                    if ($cycle !== null) {
+                        return $cycle;
+                    }
+                } elseif (isset($recursionStack[$neighbor])) {
+                    // Found a cycle - extract it from path
+                    $cycleStart = array_search($neighbor, $path);
+                    return array_slice($path, $cycleStart);
+                }
+            }
+        }
+
+        unset($recursionStack[$node]);
+        return null;
+    }
+
+    /**
      * Sort tables by FK dependencies using topological sort
+     * Throws exception if circular dependencies are detected
      */
     protected function sortTablesByDependencies($tables, $fkMappings) {
         if (empty($fkMappings)) {
@@ -721,6 +769,16 @@ class ProcessDatabaseImporter extends Process implements Module {
                     }
                 }
             }
+        }
+
+        // CYCLE DETECTION: Check for circular dependencies before sorting
+        $cycle = $this->detectCycle($dependencies);
+        if ($cycle !== null) {
+            $cycleStr = implode(' → ', $cycle) . ' → ' . $cycle[0];
+            throw new \Exception(sprintf(
+                $this->_('Circular Foreign Key dependency detected: %s. Please remove one of the FK mappings to break the cycle.'),
+                $cycleStr
+            ));
         }
 
         // Topological sort using DFS
@@ -780,8 +838,15 @@ class ProcessDatabaseImporter extends Process implements Module {
 
         // Sort tables by dependencies
         if (!empty($fkMappings)) {
-            $sortedTables = $this->sortTablesByDependencies($selectedTables, $fkMappings);
-            $selectedTables = $sortedTables;
+            try {
+                $sortedTables = $this->sortTablesByDependencies($selectedTables, $fkMappings);
+                $selectedTables = $sortedTables;
+            } catch (\Exception $e) {
+                // Circular FK dependency detected - show error and return to analysis view
+                $this->error($e->getMessage());
+                $this->error($this->_('Please uncheck one of the FK dropdowns in the cycle to break the circular dependency, then try again.'));
+                return $this->executeAnalyze();
+            }
         }
 
         // Dry run analysis
@@ -917,9 +982,19 @@ class ProcessDatabaseImporter extends Process implements Module {
 
         // Sort tables by dependencies (referenced tables must be imported first)
         if (!empty($fkMappings)) {
-            $sortedTables = $this->sortTablesByDependencies($selectedTables, $fkMappings);
-            $this->message($this->_('Tables sorted by dependencies: ' . implode(' → ', $sortedTables)));
-            $selectedTables = $sortedTables;
+            try {
+                $sortedTables = $this->sortTablesByDependencies($selectedTables, $fkMappings);
+                $this->message($this->_('Tables sorted by dependencies: ' . implode(' → ', $sortedTables)));
+                $selectedTables = $sortedTables;
+            } catch (\Exception $e) {
+                // Circular FK dependency detected - show error and return to analysis view
+                // IMPORTANT: Keep session data so user selections are preserved
+                $this->error($e->getMessage());
+                $this->error($this->_('Please uncheck one of the FK dropdowns in the cycle to break the circular dependency, then try importing again.'));
+
+                // Return analysis view with preserved session data
+                return $this->executeAnalyze();
+            }
         }
 
         // Import each selected table

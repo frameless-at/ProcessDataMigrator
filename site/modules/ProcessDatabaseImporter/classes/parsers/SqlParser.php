@@ -10,6 +10,16 @@ class SqlParser extends AbstractParser {
 
     protected $metadata = [];
     protected $tables = [];
+    protected $logger = null;
+
+    /**
+     * Set logger instance
+     *
+     * @param Logger $logger
+     */
+    public function setLogger($logger) {
+        $this->logger = $logger;
+    }
 
     /**
      * Check if this parser can handle the given file
@@ -60,6 +70,28 @@ class SqlParser extends AbstractParser {
         if (!file_exists($file)) {
             $this->setError("File not found: $file");
             return [];
+        }
+
+        // MEMORY MANAGEMENT: Check file size and available memory
+        $fileSize = filesize($file);
+        $memoryLimit = $this->getMemoryLimit();
+        $memoryUsage = memory_get_usage(true);
+        $availableMemory = $memoryLimit - $memoryUsage;
+
+        if ($this->logger) $this->logger->logInfo(sprintf(
+            'Memory Check: File=%s, MemLimit=%s, Used=%s, Available=%s',
+            $this->formatBytes($fileSize),
+            $this->formatBytes($memoryLimit),
+            $this->formatBytes($memoryUsage),
+            $this->formatBytes($availableMemory)
+        ));
+
+        // Warn if file size exceeds 50% of available memory
+        if ($fileSize > ($availableMemory * 0.5)) {
+            wire()->warning(sprintf(
+                'Large file detected (%s). This may require significant memory. Consider using a smaller sample_size.',
+                $this->formatBytes($fileSize)
+            ));
         }
 
         $tableFilter = $options['table_filter'] ?? [];
@@ -347,21 +379,21 @@ class SqlParser extends AbstractParser {
 
             // Use the highest scoring candidate
             $this->tables[$tableName]['primary_key'] = $candidates[0]['name'];
-            wire()->log->save('sql-parser', "\n=== PRIMARY KEY GUESSING ===");
-            wire()->log->save('sql-parser', "Table: $tableName");
-            wire()->log->save('sql-parser', "Guessed PK: {$candidates[0]['name']} (score: {$candidates[0]['score']})");
-            wire()->log->save('sql-parser', "All candidates: " . json_encode($candidates));
+            if ($this->logger) $this->logger->logDebug("\n=== PRIMARY KEY GUESSING ===");
+            if ($this->logger) $this->logger->logDebug("Table: $tableName");
+            if ($this->logger) $this->logger->logDebug("Guessed PK: {$candidates[0]['name']} (score: {$candidates[0]['score']})");
+            if ($this->logger) $this->logger->logDebug("All candidates: " . json_encode($candidates));
         } else {
             // Last resort: use first integer NOT NULL field
             foreach ($structure as $columnName => $columnInfo) {
                 if (($columnInfo['base_type'] ?? '') === 'integer' && !($columnInfo['nullable'] ?? true)) {
                     $this->tables[$tableName]['primary_key'] = $columnName;
-                    wire()->log->save('sql-parser', "Fallback: Using first integer NOT NULL field as PK for $tableName: $columnName");
+                    if ($this->logger) $this->logger->logDebug("Fallback: Using first integer NOT NULL field as PK for $tableName: $columnName");
                     return;
                 }
             }
 
-            wire()->log->save('sql-parser', "WARNING: Could not guess primary key for $tableName");
+            if ($this->logger) $this->logger->logDebug("WARNING: Could not guess primary key for $tableName");
         }
     }
 
@@ -452,6 +484,29 @@ class SqlParser extends AbstractParser {
             return;
         }
 
+        // MEMORY MANAGEMENT: Periodic memory check
+        static $rowCounter = 0;
+        $rowCounter++;
+
+        if ($rowCounter % 100 === 0) {
+            $memoryUsage = memory_get_usage(true);
+            $memoryLimit = $this->getMemoryLimit();
+            $memoryPercent = ($memoryUsage / $memoryLimit) * 100;
+
+            if ($memoryPercent > 80) {
+                wire()->warning(sprintf(
+                    'High memory usage: %s of %s (%.1f%%). Consider reducing sample_size.',
+                    $this->formatBytes($memoryUsage),
+                    $this->formatBytes($memoryLimit),
+                    $memoryPercent
+                ));
+            }
+
+            // Clear statement cache to free memory
+            unset($sql);
+            gc_collect_cycles();
+        }
+
         // Parse INSERT statement
         $rows = $this->parseInsertStatement($sql, $tableName);
 
@@ -486,14 +541,14 @@ class SqlParser extends AbstractParser {
             }, explode(',', $columnStr));
 
             // DEBUG: Log extracted columns
-            wire()->log->save('db-importer', "Extracted columns from INSERT: " . implode(', ', $columns));
+            if ($this->logger) $this->logger->logInfo("Extracted columns from INSERT: " . implode(', ', $columns));
         } else {
             // Use structure columns if available
             if (isset($this->tables[$tableName]['structure'])) {
                 $columns = array_keys($this->tables[$tableName]['structure']);
-                wire()->log->save('db-importer', "Using structure columns: " . implode(', ', $columns));
+                if ($this->logger) $this->logger->logInfo("Using structure columns: " . implode(', ', $columns));
             } else {
-                wire()->log->save('db-importer', "WARNING: No columns found for table $tableName");
+                if ($this->logger) $this->logger->logInfo("WARNING: No columns found for table $tableName");
             }
         }
 
@@ -511,14 +566,14 @@ class SqlParser extends AbstractParser {
                     $combined = array_combine($columns, $values);
                     if ($combined === false) {
                         // Fallback to numeric keys if combine fails
-                        wire()->log->save('db-importer', "ERROR: array_combine failed for row");
+                        if ($this->logger) $this->logger->logInfo("ERROR: array_combine failed for row");
                         $rows_processed[] = $values;
                     } else {
                         $rows_processed[] = $combined;
                     }
                 } else {
                     // If no columns or mismatch, use numeric keys
-                    wire()->log->save('db-importer', "WARNING: Column count mismatch. Columns: " . count($columns ?: []) . ", Values: " . count($values));
+                    if ($this->logger) $this->logger->logInfo("WARNING: Column count mismatch. Columns: " . count($columns ?: []) . ", Values: " . count($values));
                     $rows_processed[] = $values;
                 }
             }
@@ -526,7 +581,7 @@ class SqlParser extends AbstractParser {
             return $rows_processed;
         }
 
-        wire()->log->save('db-importer', "ERROR: No VALUES clause found in INSERT statement");
+        if ($this->logger) $this->logger->logInfo("ERROR: No VALUES clause found in INSERT statement");
         return [];
     }
 
@@ -694,6 +749,48 @@ class SqlParser extends AbstractParser {
         // Note: Unescaping is now handled during parsing, not here
 
         return $value;
+    }
+
+    /**
+     * Get PHP memory limit in bytes
+     */
+    protected function getMemoryLimit() {
+        $memoryLimit = ini_get('memory_limit');
+
+        if ($memoryLimit == -1) {
+            // Unlimited
+            return PHP_INT_MAX;
+        }
+
+        // Convert to bytes
+        $unit = strtoupper(substr($memoryLimit, -1));
+        $value = (int) substr($memoryLimit, 0, -1);
+
+        switch ($unit) {
+            case 'G':
+                $value *= 1024;
+                // fall through
+            case 'M':
+                $value *= 1024;
+                // fall through
+            case 'K':
+                $value *= 1024;
+        }
+
+        return $value;
+    }
+
+    /**
+     * Format bytes to human-readable string
+     */
+    protected function formatBytes($bytes) {
+        $units = ['B', 'KB', 'MB', 'GB'];
+        $bytes = max($bytes, 0);
+        $pow = floor(($bytes ? log($bytes) : 0) / log(1024));
+        $pow = min($pow, count($units) - 1);
+        $bytes /= (1 << (10 * $pow));
+
+        return round($bytes, 2) . ' ' . $units[$pow];
     }
 
     /**

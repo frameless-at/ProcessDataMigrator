@@ -14,6 +14,26 @@ class ImportProcessor extends WireData {
     protected $fkMappings = [];
     protected $globalIdMapping = [];
     protected $localIdMapping = [];
+    protected $dryRun = false;
+    protected $logger = null;
+
+    /**
+     * Set logger instance
+     *
+     * @param Logger $logger
+     */
+    public function setLogger($logger) {
+        $this->logger = $logger;
+    }
+
+    /**
+     * Set dry-run mode
+     *
+     * @param bool $dryRun If true, simulate import without saving
+     */
+    public function setDryRun($dryRun) {
+        $this->dryRun = (bool) $dryRun;
+    }
 
     /**
      * Import data and create pages
@@ -36,12 +56,14 @@ class ImportProcessor extends WireData {
 
         $titleField = $mapping['title_field'];
 
-        // DEBUG: Log FK mappings and global ID mapping
-        $this->wire()->log->save('db-importer', "=== IMPORT START ===");
-        $this->wire()->log->save('db-importer', "FK Mappings: " . json_encode($fkMappings));
-        $this->wire()->log->save('db-importer', "Global ID Mapping tables: " . implode(', ', array_keys($globalIdMapping)));
-        foreach ($globalIdMapping as $table => $idMap) {
-            $this->wire()->log->save('db-importer', "  - {$table}: " . count($idMap) . " entries");
+        // Log import start
+        if ($this->logger) {
+            $this->logger->logInfo("=== IMPORT START ===");
+            $this->logger->logDebug("FK Mappings: " . json_encode($fkMappings));
+            $this->logger->logDebug("Global ID Mapping tables: " . implode(', ', array_keys($globalIdMapping)));
+            foreach ($globalIdMapping as $table => $idMap) {
+                $this->logger->logDebug("  - {$table}: " . count($idMap) . " entries");
+            }
         }
 
         foreach ($data as $index => $row) {
@@ -114,10 +136,12 @@ class ImportProcessor extends WireData {
             $n++;
         }
 
-        // DEBUG: Show what we're trying to import
-        $this->wire()->log->save('db-importer', "Processing row with title: $title");
-        $this->wire()->log->save('db-importer', "Row data columns: " . implode(', ', array_keys($row)));
-        $this->wire()->log->save('db-importer', "Mapping fields: " . implode(', ', array_keys($mapping['fields'])));
+        // Show what we're trying to import
+        if ($this->logger) {
+            $this->logger->logDebug("Processing row with title: $title");
+            $this->logger->logDebug("Row data columns: " . implode(', ', array_keys($row)));
+            $this->logger->logDebug("Mapping fields: " . implode(', ', array_keys($mapping['fields'])));
+        }
 
         // Set field values from mapping
         foreach ($mapping['fields'] as $fieldName => $fieldMapping) {
@@ -125,39 +149,54 @@ class ImportProcessor extends WireData {
             $fieldtype = $fieldMapping['fieldtype'];
             $sourceColumn = $fieldMapping['source_column']; // CRITICAL: Use actual SQL column name!
 
-            $this->wire()->log->save('db-importer', "Checking field: $sourceColumn -> $targetField ($fieldtype)");
+            if ($this->logger) $this->logger->logDebug("Checking field: $sourceColumn -> $targetField ($fieldtype)");
 
-            // Skip if field doesn't exist in template
-            if (!$template->fieldgroup->hasField($targetField)) {
-                $this->wire()->log->save('db-importer', "  SKIP: Field $targetField not in template");
+            // Skip if field doesn't exist in template (except in dry-run mode)
+            if (!$this->dryRun && $template->fieldgroup && !$template->fieldgroup->hasField($targetField)) {
+                if ($this->logger) $this->logger->logDebug("  SKIP: Field $targetField not in template");
                 continue;
+            }
+
+            // In dry-run mode, skip field validation since template might be a mock
+            if ($this->dryRun) {
+                if ($this->logger) $this->logger->logDebug("  DRY-RUN: Skipping field existence check for $targetField");
             }
 
             // Skip image/file fields - these need special handling with actual files
             if (in_array($fieldtype, ['FieldtypeImage', 'FieldtypeFile'])) {
-                $this->wire()->log->save('db-importer', "  SKIP: Field $targetField is image/file type");
+                if ($this->logger) $this->logger->logDebug("  SKIP: Field $targetField is image/file type");
                 continue;
             }
 
             // Skip if no data
             if (!isset($row[$sourceColumn])) {
-                $this->wire()->log->save('db-importer', "  SKIP: No data for source column $sourceColumn");
+                if ($this->logger) $this->logger->logDebug("  SKIP: No data for source column $sourceColumn");
                 continue;
             }
 
             $value = $row[$sourceColumn];
-            $this->wire()->log->save('db-importer', "  Value from DB: " . var_export($value, true));
+            if ($this->logger) $this->logger->logDebug("  Value from DB: " . var_export($value, true));
 
             // Convert value based on fieldtype (pass sourceColumn for FK resolution)
             $value = $this->convertValue($value, $fieldMapping, $sourceColumn);
-            $this->wire()->log->save('db-importer', "  Converted value: " . var_export($value, true));
+            if ($this->logger) $this->logger->logDebug("  Converted value: " . var_export($value, true));
 
             // Set field value
             $page->set($targetField, $value);
-            $this->wire()->log->save('db-importer', "  SET: $targetField = " . var_export($value, true));
+            if ($this->logger) $this->logger->logDebug("  SET: $targetField = " . var_export($value, true));
         }
 
-        // Save page
+        // Save page (unless in dry-run mode)
+        if ($this->dryRun) {
+            // DRY-RUN: Don't save, just validate and return mock page
+            if ($this->logger) $this->logger->logDebug("  DRY-RUN: Skipping page save");
+
+            // Assign temporary ID for dry-run mode (for FK resolution simulation)
+            $page->id = 999000 + $this->imported;
+
+            return $page;
+        }
+
         $saved = $page->save();
 
         // Check if save was successful
@@ -198,21 +237,23 @@ class ImportProcessor extends WireData {
             $refTable = $this->fkMappings[$sourceColumn];
             $sqlId = (int) $value;
 
-            $this->wire()->log->save('db-importer', "    FK CHECK: {$sourceColumn}={$sqlId} maps to table '{$refTable}'");
-            $this->wire()->log->save('db-importer', "    Available tables in globalIdMapping: " . implode(', ', array_keys($this->globalIdMapping)));
+            if ($this->logger) {
+                $this->logger->logDebug("    FK CHECK: {$sourceColumn}={$sqlId} maps to table '{$refTable}'");
+                $this->logger->logDebug("    Available tables in globalIdMapping: " . implode(', ', array_keys($this->globalIdMapping)));
+            }
 
             // Look up PW Page ID in global ID mapping
             if (isset($this->globalIdMapping[$refTable])) {
                 if (isset($this->globalIdMapping[$refTable][$sqlId])) {
                     $pwPageId = $this->globalIdMapping[$refTable][$sqlId];
-                    $this->wire()->log->save('db-importer', "    FK RESOLVED: {$sourceColumn}={$sqlId} → {$refTable} Page #{$pwPageId}");
+                    if ($this->logger) $this->logger->logDebug("    FK RESOLVED: {$sourceColumn}={$sqlId} → {$refTable} Page #{$pwPageId}");
                     return $pwPageId;
                 } else {
-                    $this->wire()->log->save('db-importer', "    FK NOT FOUND: SQL ID {$sqlId} not in {$refTable} mapping (has: " . implode(', ', array_keys($this->globalIdMapping[$refTable])) . ")");
+                    if ($this->logger) $this->logger->logWarning("    FK NOT FOUND: SQL ID {$sqlId} not in {$refTable} mapping (has: " . implode(', ', array_keys($this->globalIdMapping[$refTable])) . ")");
                     return null;
                 }
             } else {
-                $this->wire()->log->save('db-importer', "    FK ERROR: Table '{$refTable}' not found in globalIdMapping! Was it imported first?");
+                if ($this->logger) $this->logger->logError("    FK ERROR: Table '{$refTable}' not found in globalIdMapping! Was it imported first?");
                 return null;
             }
         }
