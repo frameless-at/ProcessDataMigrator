@@ -1101,16 +1101,28 @@ class ProcessDatabaseImporter extends Process implements Module {
                     }
                 }
 
-                // Step 2: Create template and fields
+                // Step 2: Create TWO templates: list template and detail template
                 $templateCreator = $this->wire(new TemplateCreator());
-                $template = $templateCreator->createTemplate($mapping);
 
-                $this->message($this->_('Created template: ') . $template->name);
+                // Create detail template (singular) for individual records
+                $detailTemplate = $templateCreator->createTemplate($mapping);
+                $this->message($this->_('Created detail template: ') . $detailTemplate->name);
 
-                // Step 3: Create parent page
-                $parent = $templateCreator->createParentPage($mapping['parent'], $template->name);
+                // Create list template (plural) for parent/overview page
+                $listTemplateName = $tableName . '_list'; // e.g., "customers_list"
+                $listTemplate = $templateCreator->createListTemplate($listTemplateName);
+                $this->message($this->_('Created list template: ') . $listTemplate->name);
 
-                $this->message($this->_('Created parent page: ') . $parent->path);
+                // Step 3: Create parent structure
+                // First, ensure /import/ container exists
+                $importContainer = $templateCreator->createParentPage('/import/', null);
+
+                // Then, create table-specific parent page under /import/
+                // e.g., /import/customers/ with template "customers_list"
+                $tableParentPath = '/import/' . $tableName . '/';
+                $tableParent = $templateCreator->createTableParentPage($tableParentPath, $listTemplate, $importContainer);
+
+                $this->message($this->_('Created table parent page: ') . $tableParent->path);
 
                 // Step 4: Import data
                 // CRITICAL: Limit data to max_rows for import (analysis used full sample_size)
@@ -1123,8 +1135,9 @@ class ProcessDatabaseImporter extends Process implements Module {
                 $importProcessor = $this->wire(new ImportProcessor());
 
                 // Pass FK mappings and ID mapping for this table
+                // IMPORTANT: Use detailTemplate for records, tableParent as parent
                 $tableFkMappings = isset($fkMappings[$tableName]) ? $fkMappings[$tableName] : [];
-                $result = $importProcessor->import($importData, $mapping, $template, $parent, $tableFkMappings, $idMapping);
+                $result = $importProcessor->import($importData, $mapping, $detailTemplate, $tableParent, $tableFkMappings, $idMapping);
 
                 // Update ID mapping with newly created pages
                 if (isset($result['id_mapping'])) {
@@ -1137,8 +1150,9 @@ class ProcessDatabaseImporter extends Process implements Module {
                 // Collect rollback data for this table
                 $allRollbackData[] = [
                     'table' => $tableName,
-                    'template' => $template->name,
-                    'parent_page' => $parent->path,
+                    'template' => $detailTemplate->name,
+                    'list_template' => $listTemplate->name,
+                    'parent_page' => $tableParent->path,
                     'created_fields' => $templateCreator->getCreatedFields(),
                     'created_pages' => $result['created_pages'],
                     'errors' => $result['errors'],
@@ -1153,6 +1167,20 @@ class ProcessDatabaseImporter extends Process implements Module {
                     foreach ($result['errors'] as $error) {
                         $this->error($this->_("Row {$error['row']}: {$error['error']}"));
                     }
+                }
+
+                // Step 5: Generate frontend template files (.php)
+                $this->message($this->_("Generating frontend template files for {$tableName}..."));
+                $generatedFiles = $templateCreator->generateTemplateFiles(
+                    $listTemplate->name,
+                    $detailTemplate->name,
+                    $mapping,
+                    $tableFkMappings,
+                    $tableName
+                );
+
+                foreach ($generatedFiles as $filePath) {
+                    $this->message($this->_("  ✓ Generated: " . basename($filePath)));
                 }
             }
 
