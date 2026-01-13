@@ -431,6 +431,29 @@ class TypeDetector extends WireData {
             return ['is_options' => false];
         }
 
+        // CRITICAL: Check if values are boolean BEFORE treating as options
+        // Values like "true"/"false" or "0"/"1" should be FieldtypeCheckbox, NOT Options
+        if ($uniqueCount <= 2) {
+            $normalizedUnique = array_map(function($v) {
+                return strtolower(trim($v));
+            }, $unique);
+
+            $booleanValues = ['0', '1', 'true', 'false', 'yes', 'no', 'ja', 'nein'];
+            $allAreBooleanLike = true;
+
+            foreach ($normalizedUnique as $val) {
+                if (!in_array($val, $booleanValues)) {
+                    $allAreBooleanLike = false;
+                    break;
+                }
+            }
+
+            // If all values are boolean-like, this should be a checkbox, not options
+            if ($allAreBooleanLike) {
+                return ['is_options' => false];
+            }
+        }
+
         // CRITICAL: Certain column names should NEVER be options fields
         // Even if they have few unique values in the sample
         $neverOptionsPatterns = [
@@ -540,6 +563,39 @@ class TypeDetector extends WireData {
         $unique = array_unique($values);
         $uniqueCount = count($unique);
         $isBinaryValues = $uniqueCount <= 2;
+
+        // CRITICAL: Check if values are actually boolean strings
+        // If values are "true"/"false" or "0"/"1", it's DEFINITELY boolean
+        $areBooleanValues = false;
+        if ($isBinaryValues && $uniqueCount > 0) {
+            $normalizedUnique = array_map(function($v) {
+                return strtolower(trim($v));
+            }, $unique);
+
+            $booleanStrings = ['0', '1', 'true', 'false', 'yes', 'no', 'ja', 'nein'];
+            $allAreBooleanLike = true;
+
+            foreach ($normalizedUnique as $val) {
+                if (!in_array($val, $booleanStrings)) {
+                    $allAreBooleanLike = false;
+                    break;
+                }
+            }
+
+            $areBooleanValues = $allAreBooleanLike;
+        }
+
+        // STRONGEST indicator: Values are literally boolean strings
+        // This catches "true"/"false" from JSON/XML, regardless of field name
+        if ($areBooleanValues) {
+            return [
+                'is_boolean' => true,
+                'type' => 'boolean',
+                'confidence' => 95,
+                'fieldtype' => 'FieldtypeCheckbox',
+                'patterns' => ['boolean_values']
+            ];
+        }
 
         // Strong indicator: tinyint(1) + boolean name
         if ($isTinyInt && $hasBooleanName) {
