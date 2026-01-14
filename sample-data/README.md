@@ -1,6 +1,6 @@
 # Sample Data Files for Testing
 
-This directory contains sample data files for testing the Database Importer module with various file formats.
+This directory contains sample data files for testing the Data Migrator module with various file formats.
 
 ## Files
 
@@ -119,16 +119,16 @@ After importing all three files, you should have:
 
 1. **Customers** (10 records)
    - Template: `customers` (detail), `customers_list` (overview)
-   - Parent page: `/import/customers/`
+   - Parent page: `/migration/customers/`
 
 2. **Orders** (8 records)
    - Template: `orders` (detail), `orders_list` (overview)
-   - Parent page: `/import/orders/`
+   - Parent page: `/migration/orders/`
    - FK field: `orders_customer_id` → references customers
 
 3. **Products** (10 records)
    - Template: `products` (detail), `products_list` (overview)
-   - Parent page: `/import/products/`
+   - Parent page: `/migration/products/`
 
 Each detail template will include:
 - Quick access variables for all fields

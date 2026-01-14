@@ -1147,13 +1147,13 @@ class ProcessDataMigrator extends Process implements Module, ConfigurableModule 
                 $this->message($this->_('Created list template: ') . $listTemplate->name);
 
                 // Step 3: Create parent structure
-                // First, ensure /import/ container exists
-                $importContainer = $templateCreator->createParentPage('/import/', null);
+                // First, ensure /migration/ container exists
+                $migrationContainer = $templateCreator->createParentPage('/migration/', null);
 
-                // Then, create table-specific parent page under /import/
-                // e.g., /import/customers/ with template "customers_list"
-                $tableParentPath = '/import/' . $tableName . '/';
-                $tableParent = $templateCreator->createTableParentPage($tableParentPath, $listTemplate, $importContainer);
+                // Then, create table-specific parent page under /migration/
+                // e.g., /migration/customers/ with template "customers_list"
+                $tableParentPath = '/migration/' . $tableName . '/';
+                $tableParent = $templateCreator->createTableParentPage($tableParentPath, $listTemplate, $migrationContainer);
 
                 $this->message($this->_('Created table parent page: ') . $tableParent->path);
 

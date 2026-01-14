@@ -3,7 +3,7 @@
 namespace ProcessWire;
 
 /**
- * Mapping Engine for Database Importer
+ * Mapping Engine for Data Migrator
  * Creates automatic field mappings based on analysis results
  */
 class MappingEngine extends WireData {
