@@ -13,6 +13,7 @@ require_once(__DIR__ . '/classes/MappingEngine.php');
 require_once(__DIR__ . '/classes/TemplateCreator.php');
 require_once(__DIR__ . '/classes/ImportProcessor.php');
 require_once(__DIR__ . '/classes/ImportRollback.php');
+require_once(__DIR__ . '/classes/Logger.php');
 
 /**
  * ProcessWire Data Migrator
