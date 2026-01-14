@@ -31,23 +31,6 @@ class TypeDetector extends WireData {
     ];
 
     /**
-     * Column name patterns for type hints
-     */
-    protected $columnNamePatterns = [
-        'email' => ['email', 'e_mail', 'mail'],
-        'url' => ['url', 'link', 'website'],
-        'phone' => ['phone', 'tel', 'telefon', 'mobile', 'handy'],
-        'date' => ['date', 'datum'],
-        'datetime' => ['datetime', 'created_at', 'updated_at', 'modified_at', 'published_at'],
-        'image' => ['image', 'img', 'photo', 'picture', 'foto', 'bild'],
-        'file' => ['file', 'attachment', 'document', 'datei'],
-        'password' => ['password', 'pass', 'pwd', 'passwort'],
-        'checkbox' => ['is_', 'has_', 'active', 'enabled', 'published', 'visible'],
-        'textarea' => ['description', 'body', 'content', 'text', 'beschreibung', 'inhalt'],
-        'title' => ['title', 'headline', 'subject', 'titel'],
-    ];
-
-    /**
      * Fieldtype mapping for pattern matches
      */
     protected $patternFieldtypeMap = [
@@ -103,7 +86,7 @@ class TypeDetector extends WireData {
         }
 
         // Check for boolean/checkbox first (before options detection)
-        $booleanResult = $this->detectBooleanField($columnName, $columnInfo, $values);
+        $booleanResult = $this->detectBooleanField($columnInfo, $values);
         if ($booleanResult['is_boolean']) {
             return $booleanResult;
         }
@@ -135,25 +118,12 @@ class TypeDetector extends WireData {
                     $result = $patternResult;
                 }
             }
-
-            // Refine with column name hints ONLY if result is still uncertain
-            if ($result['confidence'] < 80) {
-                $nameResult = $this->detectFromColumnName($columnName);
-                if ($nameResult['confidence'] > 0 && $nameResult['fieldtype'] !== 'FieldtypeText') {
-                    // Only apply if name result is more confident
-                    if ($nameResult['confidence'] > $result['confidence']) {
-                        $result['fieldtype'] = $nameResult['fieldtype'];
-                        $result['type'] = $nameResult['type'];
-                        $result['confidence'] = $nameResult['confidence'];
-                    }
-                }
-            }
         }
 
         // Check for options/select field - but only if not already detected as email, URL, etc.
         // Options should not override specific types with high confidence
         if ($result['confidence'] < 80 || $result['fieldtype'] === 'FieldtypeText') {
-            $optionsResult = $this->detectOptionsField($values, $columnName);
+            $optionsResult = $this->detectOptionsField($values);
             if ($optionsResult['is_options']) {
                 return $optionsResult;
             }
@@ -161,7 +131,7 @@ class TypeDetector extends WireData {
 
         // CRITICAL: For ENUM/SET fields, extract options even though fieldtype is already set
         if (in_array($baseType, ['enum', 'set']) && $result['fieldtype'] === 'FieldtypeOptions') {
-            $optionsResult = $this->detectOptionsField($values, $columnName);
+            $optionsResult = $this->detectOptionsField($values);
             if ($optionsResult['is_options'] && isset($optionsResult['options'])) {
                 // Merge options into result
                 $result['options'] = $optionsResult['options'];
@@ -378,51 +348,12 @@ class TypeDetector extends WireData {
         ];
     }
 
-    /**
-     * Detect type from column name
-     */
-    protected function detectFromColumnName($columnName) {
-        $name = strtolower($columnName);
-
-        foreach ($this->columnNamePatterns as $type => $patterns) {
-            foreach ($patterns as $pattern) {
-                if (strpos($name, $pattern) !== false) {
-                    $fieldtypeMap = [
-                        'email' => 'FieldtypeEmail',
-                        'url' => 'FieldtypeURL',
-                        'phone' => 'FieldtypeText',
-                        'date' => 'FieldtypeDatetime',
-                        'datetime' => 'FieldtypeDatetime',
-                        'image' => 'FieldtypeImage',
-                        'file' => 'FieldtypeFile',
-                        'password' => 'FieldtypePassword',
-                        'checkbox' => 'FieldtypeCheckbox',
-                        'textarea' => 'FieldtypeTextarea',
-                        'title' => 'FieldtypePageTitle',
-                    ];
-
-                    return [
-                        'type' => $type,
-                        'confidence' => 70,
-                        'fieldtype' => $fieldtypeMap[$type] ?? 'FieldtypeText',
-                        'patterns' => [$pattern]
-                    ];
-                }
-            }
-        }
-
-        return [
-            'type' => 'unknown',
-            'confidence' => 0,
-            'fieldtype' => 'FieldtypeText',
-            'patterns' => []
-        ];
-    }
 
     /**
      * Detect if this should be an options/select field
+     * Pure data-based detection using uniqueness ratio and value patterns
      */
-    protected function detectOptionsField($values, $columnName = '') {
+    protected function detectOptionsField($values) {
         $unique = array_unique($values);
         $total = count($values);
         $uniqueCount = count($unique);
@@ -450,25 +381,6 @@ class TypeDetector extends WireData {
 
             // If all values are boolean-like, this should be a checkbox, not options
             if ($allAreBooleanLike) {
-                return ['is_options' => false];
-            }
-        }
-
-        // CRITICAL: Certain column names should NEVER be options fields
-        // Even if they have few unique values in the sample
-        $neverOptionsPatterns = [
-            'name', 'title', 'headline', 'subject',
-            'description', 'desc', 'text', 'content', 'body',
-            'product', 'article', 'item',
-            'first_name', 'last_name', 'full_name',
-            'company', 'organization',
-            'street', 'address', 'city', 'town',
-            'note', 'comment', 'remark'
-        ];
-
-        $colName = strtolower($columnName);
-        foreach ($neverOptionsPatterns as $pattern) {
-            if (strpos($colName, $pattern) !== false) {
                 return ['is_options' => false];
             }
         }
@@ -527,10 +439,10 @@ class TypeDetector extends WireData {
 
     /**
      * Detect if this is a boolean/checkbox field
+     * Pure data-based detection using SQL type and actual boolean values
      */
-    protected function detectBooleanField($columnName, $columnInfo, $values) {
+    protected function detectBooleanField($columnInfo, $values) {
         $sqlType = $columnInfo['type'] ?? '';
-        $name = strtolower($columnName);
 
         // Check for tinyint(1) - MySQL standard for boolean
         $isTinyInt = stripos($sqlType, 'tinyint(1)') !== false;
@@ -572,30 +484,6 @@ class TypeDetector extends WireData {
             return ['is_boolean' => false];
         }
 
-        // Check for boolean-like column names
-        $booleanPrefixes = ['is_', 'has_', 'can_', 'should_', 'will_', 'does_'];
-        $booleanSuffixes = ['_active', '_enabled', '_visible', '_published', '_verified', '_confirmed'];
-        $booleanNames = ['active', 'enabled', 'visible', 'published', 'verified', 'confirmed', 'status'];
-
-        $hasBooleanName = false;
-        foreach ($booleanPrefixes as $prefix) {
-            if (strpos($name, $prefix) === 0) {
-                $hasBooleanName = true;
-                break;
-            }
-        }
-        if (!$hasBooleanName) {
-            foreach ($booleanSuffixes as $suffix) {
-                if (substr($name, -strlen($suffix)) === $suffix) {
-                    $hasBooleanName = true;
-                    break;
-                }
-            }
-        }
-        if (!$hasBooleanName && in_array($name, $booleanNames)) {
-            $hasBooleanName = true;
-        }
-
         // STRONGEST indicator: Values are literally boolean strings
         // This catches "true"/"false" from JSON/XML, regardless of field name
         if ($areBooleanValues) {
@@ -608,36 +496,26 @@ class TypeDetector extends WireData {
             ];
         }
 
-        // Strong indicator: tinyint(1) + boolean name
-        if ($isTinyInt && $hasBooleanName) {
+        // Strong indicator: tinyint(1) with boolean values
+        if ($isTinyInt && $areBooleanValues) {
             return [
                 'is_boolean' => true,
                 'type' => 'boolean',
                 'confidence' => 95,
                 'fieldtype' => 'FieldtypeCheckbox',
-                'patterns' => ['tinyint(1)', 'boolean_name']
-            ];
-        }
-
-        // Medium indicator: tinyint(1) with boolean values
-        if ($isTinyInt && $areBooleanValues) {
-            return [
-                'is_boolean' => true,
-                'type' => 'boolean',
-                'confidence' => 90,
-                'fieldtype' => 'FieldtypeCheckbox',
                 'patterns' => ['tinyint(1)', 'boolean_values']
             ];
         }
 
-        // Weak indicator: boolean name with boolean values
-        if ($hasBooleanName && $areBooleanValues) {
+        // tinyint(1) alone (without confirming boolean values) - medium confidence
+        // This handles SQL imports where tinyint(1) is the standard boolean type
+        if ($isTinyInt && $uniqueCount <= 2) {
             return [
                 'is_boolean' => true,
                 'type' => 'boolean',
-                'confidence' => 85,
+                'confidence' => 80,
                 'fieldtype' => 'FieldtypeCheckbox',
-                'patterns' => ['boolean_name', 'boolean_values']
+                'patterns' => ['tinyint(1)']
             ];
         }
 
