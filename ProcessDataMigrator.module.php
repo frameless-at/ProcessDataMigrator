@@ -13,6 +13,7 @@ require_once(__DIR__ . '/classes/MappingEngine.php');
 require_once(__DIR__ . '/classes/TemplateCreator.php');
 require_once(__DIR__ . '/classes/ImportProcessor.php');
 require_once(__DIR__ . '/classes/ImportRollback.php');
+require_once(__DIR__ . '/classes/Logger.php');
 
 /**
  * ProcessWire Data Migrator
@@ -22,7 +23,7 @@ require_once(__DIR__ . '/classes/ImportRollback.php');
  * @author ProcessWire
  * @version 1.1.0
  */
-class ProcessDataMigrator extends Process implements Module {
+class ProcessDataMigrator extends Process implements Module, ConfigurableModule {
 
     /**
      * Module information
@@ -167,7 +168,7 @@ class ProcessDataMigrator extends Process implements Module {
      * Step 1: Upload file
      */
     protected function executeUpload() {
-        $this->headline('Database Import - Upload');
+        $this->headline('Data Migration - Upload');
 
         // Build form first
         $form = $this->buildUploadForm();
@@ -231,7 +232,7 @@ class ProcessDataMigrator extends Process implements Module {
      * Step 2: Analyze and show results
      */
     protected function executeAnalyze() {
-        $this->headline('Database Import - Analyze');
+        $this->headline('Data Migration - Analyze');
 
         $sessionData = $this->session->get(self::SESSION_KEY);
         $analysis = $sessionData['analysis'] ?? [];
@@ -259,7 +260,7 @@ class ProcessDataMigrator extends Process implements Module {
         // File upload - using Markup instead of InputfieldFile
         $f = $this->modules->get('InputfieldMarkup');
         $f->label = $this->_('Upload Data File');
-        $f->description = $this->_('Upload a data file to analyze and import');
+        $f->description = $this->_('Upload a data file to analyze and migrate');
 
         $fileInput = '<div class="InputfieldContent">';
         $fileInput .= '<input type="file" name="sql_file" accept=".sql,.csv,.json,.xml" required>';
@@ -271,7 +272,7 @@ class ProcessDataMigrator extends Process implements Module {
 
         // Options fieldset
         $fieldset = $this->modules->get('InputfieldFieldset');
-        $fieldset->label = $this->_('Import Options');
+        $fieldset->label = $this->_('Migration Options');
         $fieldset->collapsed = Inputfield::collapsedYes;
 
         // Sample size
@@ -288,7 +289,7 @@ class ProcessDataMigrator extends Process implements Module {
         $f = $this->modules->get('InputfieldInteger');
         $f->name = 'max_rows';
         $f->label = $this->_('Maximum Rows');
-        $f->description = $this->_('Maximum number of rows to import per table (0 = all)');
+        $f->description = $this->_('Maximum number of rows to migrate per table (0 = all)');
         $f->value = 0;
         $f->min = 0;
         $fieldset->add($f);
@@ -394,7 +395,7 @@ class ProcessDataMigrator extends Process implements Module {
         $allTableNames = array_keys($analysis);
 
         $out = '<form method="post" action="' . $this->page->url . '">';
-        $out .= '<div class="database-importer-analysis">';
+        $out .= '<div class="data-migrator-analysis">';
         // Summary
         $totalRows = array_sum(array_column($analysis, 'row_count'));
         $totalColumns = array_sum(array_map(function($table) {
@@ -405,7 +406,7 @@ class ProcessDataMigrator extends Process implements Module {
         $out .= '<h3>' . $this->_('Analysis Complete') . '</h3>';
         $out .= '<p>';
         $out .= sprintf(
-            $this->_('%d tables found - Select tables to import below'),
+            $this->_('%d tables found - Select tables to migrate below'),
             count($analysis)
         );
         $out .= '<br>';
@@ -520,7 +521,7 @@ class ProcessDataMigrator extends Process implements Module {
         $out .= '<table class="uk-table uk-table-striped uk-table-small">';
         $out .= '<thead>';
         $out .= '<tr>';
-        $out .= '<th style="width: 30px;">' . $this->_('Import') . '</th>';
+        $out .= '<th style="width: 30px;">' . $this->_('Migrate') . '</th>';
         $out .= '<th>' . $this->_('Column') . '</th>';
         $out .= '<th>' . $this->_('Detected Type') . '</th>';
         $out .= '<th style="min-width: 250px;">' . $this->_('Suggested Fieldtype') . '</th>';
@@ -628,14 +629,14 @@ class ProcessDataMigrator extends Process implements Module {
 
         // Dry Run button (recommended)
         $out .= '<button type="submit" name="action" value="dry_run" class="ui-button ui-priority-primary">';
-        $out .= '<i class="fa fa-eye"></i> ' . $this->_('Preview Import (Dry Run)');
+        $out .= '<i class="fa fa-eye"></i> ' . $this->_('Preview Migration (Dry Run)');
         $out .= '</button>';
 
         $out .= ' &nbsp; ';
 
         // Direct import button (skip preview)
         $out .= '<button type="submit" name="action" value="import" class="ui-button ui-priority-secondary">';
-        $out .= '<i class="fa fa-upload"></i> ' . $this->_('Import Now (Skip Preview)');
+        $out .= '<i class="fa fa-upload"></i> ' . $this->_('Migrate Now (Skip Preview)');
         $out .= '</button>';
 
         $out .= ' &nbsp; ';
@@ -659,7 +660,7 @@ class ProcessDataMigrator extends Process implements Module {
         // Success alert
         $out .= '<div class="uk-alert uk-alert-success" style="margin: 20px 0;">';
         $out .= '<h3 style="margin-top: 0;"><i class="fa fa-check-circle"></i> ' . $this->_('Dry Run Complete - Preview Results') . '</h3>';
-        $out .= '<p>' . $this->_('The following changes will be made when you execute the import:') . '</p>';
+        $out .= '<p>' . $this->_('The following changes will be made when you execute the migration:') . '</p>';
         $out .= '</div>';
 
         // Summary boxes
@@ -735,7 +736,7 @@ class ProcessDataMigrator extends Process implements Module {
         $out .= '<input type="hidden" name="action" value="confirm_import">';
 
         $out .= '<button type="submit" class="ui-button ui-priority-primary" style="font-size: 16px; padding: 10px 20px;">';
-        $out .= '<i class="fa fa-check"></i> ' . $this->_('Execute Import Now');
+        $out .= '<i class="fa fa-check"></i> ' . $this->_('Execute Migration Now');
         $out .= '</button>';
 
         $out .= ' &nbsp; ';
@@ -859,7 +860,7 @@ class ProcessDataMigrator extends Process implements Module {
      * Execute dry run (preview without actual import)
      */
     protected function executeDryRun() {
-        $this->headline('Database Import - Dry Run Preview');
+        $this->headline('Data Migration - Dry Run Preview');
 
         // Get session data
         $sessionData = $this->session->get(self::SESSION_KEY);
@@ -881,7 +882,7 @@ class ProcessDataMigrator extends Process implements Module {
         $selectedTables = $sessionData['selected_tables'] ?? array_keys($allAnalysis);
 
         if (empty($selectedTables)) {
-            $this->error($this->_('No tables selected for import.'));
+            $this->error($this->_('No tables selected for migration.'));
             $this->session->redirect($this->page->url);
         }
 
@@ -987,7 +988,7 @@ class ProcessDataMigrator extends Process implements Module {
      * Execute import process
      */
     protected function executeImport() {
-        $this->headline('Database Import - Processing');
+        $this->headline('Data Migration - Processing');
 
         // Get session data
         $sessionData = $this->session->get(self::SESSION_KEY);
@@ -1014,11 +1015,11 @@ class ProcessDataMigrator extends Process implements Module {
         $selectedTables = $sessionData['selected_tables'] ?? array_keys($allAnalysis);
 
         if (empty($selectedTables)) {
-            $this->error($this->_('No tables selected for import.'));
+            $this->error($this->_('No tables selected for migration.'));
             $this->session->redirect($this->page->url);
         }
 
-        $this->message($this->_("Selected tables for import: " . implode(', ', $selectedTables)));
+        $this->message($this->_("Selected tables for migration: " . implode(', ', $selectedTables)));
 
         // Get FK mappings
         $fkMappings = $sessionData['fk_mappings'] ?? [];
@@ -1042,7 +1043,7 @@ class ProcessDataMigrator extends Process implements Module {
                 // Circular FK dependency detected - show error and return to analysis view
                 // IMPORTANT: Keep session data so user selections are preserved
                 $this->error($e->getMessage());
-                $this->error($this->_('Please uncheck one of the FK dropdowns in the cycle to break the circular dependency, then try importing again.'));
+                $this->error($this->_('Please uncheck one of the FK dropdowns in the cycle to break the circular dependency, then try migrating again.'));
 
                 // Return analysis view with preserved session data
                 return $this->executeAnalyze();
@@ -1065,7 +1066,7 @@ class ProcessDataMigrator extends Process implements Module {
                     continue;
                 }
 
-                $this->message($this->_("Importing table: {$tableName}"));
+                $this->message($this->_("Migrating table: {$tableName}"));
 
                 // Step 1: Create automatic mapping
                 $mappingEngine = $this->wire(new MappingEngine());
@@ -1146,13 +1147,13 @@ class ProcessDataMigrator extends Process implements Module {
                 $this->message($this->_('Created list template: ') . $listTemplate->name);
 
                 // Step 3: Create parent structure
-                // First, ensure /import/ container exists
-                $importContainer = $templateCreator->createParentPage('/import/', null);
+                // First, ensure /migration/ container exists
+                $migrationContainer = $templateCreator->createParentPage('/migration/', null);
 
-                // Then, create table-specific parent page under /import/
-                // e.g., /import/customers/ with template "customers_list"
-                $tableParentPath = '/import/' . $tableName . '/';
-                $tableParent = $templateCreator->createTableParentPage($tableParentPath, $listTemplate, $importContainer);
+                // Then, create table-specific parent page under /migration/
+                // e.g., /migration/customers/ with template "customers_list"
+                $tableParentPath = '/migration/' . $tableName . '/';
+                $tableParent = $templateCreator->createTableParentPage($tableParentPath, $listTemplate, $migrationContainer);
 
                 $this->message($this->_('Created table parent page: ') . $tableParent->path);
 
@@ -1161,7 +1162,7 @@ class ProcessDataMigrator extends Process implements Module {
                 $importData = $tableData['data'];
                 if ($maxRows > 0 && count($importData) > $maxRows) {
                     $importData = array_slice($importData, 0, $maxRows);
-                    $this->message($this->_("Import limited to {$maxRows} rows for table {$tableName}"));
+                    $this->message($this->_("Migration limited to {$maxRows} rows for table {$tableName}"));
                 }
 
                 $importProcessor = $this->wire(new ImportProcessor());
@@ -1192,7 +1193,7 @@ class ProcessDataMigrator extends Process implements Module {
                 ];
 
                 // Show import summary
-                $this->message($this->_("Imported {$result['imported']} pages for table {$tableName}"));
+                $this->message($this->_("Migrated {$result['imported']} pages for table {$tableName}"));
 
                 // Show errors if any
                 if (!empty($result['errors'])) {
@@ -1226,7 +1227,7 @@ class ProcessDataMigrator extends Process implements Module {
             $this->session->redirect($this->page->url);
 
         } catch (\Exception $e) {
-            $this->error($this->_('Import failed: ') . $e->getMessage());
+            $this->error($this->_('Migration failed: ') . $e->getMessage());
             return $this->executeAnalyze();
         }
     }
@@ -1235,12 +1236,12 @@ class ProcessDataMigrator extends Process implements Module {
      * Show import results
      */
     protected function executeImportResult() {
-        $this->headline('Database Import - Results');
+        $this->headline('Data Migration - Results');
 
         // Get session data
         $sessionData = $this->session->get(self::SESSION_KEY);
         if (!$sessionData || !isset($sessionData['rollback_data'])) {
-            $this->error($this->_('No import results found. Please start over.'));
+            $this->error($this->_('No migration results found. Please start over.'));
             $this->session->redirect($this->page->url);
         }
 
@@ -1251,9 +1252,9 @@ class ProcessDataMigrator extends Process implements Module {
 
         // Success summary
         $out .= '<div class="uk-alert uk-alert-success">';
-        $out .= '<h3>' . $this->_('Import Completed Successfully') . '</h3>';
+        $out .= '<h3>' . $this->_('Migration Completed Successfully') . '</h3>';
         $out .= '<p>' . sprintf(
-            $this->_('Successfully imported %d pages from %d tables'),
+            $this->_('Successfully migrated %d pages from %d tables'),
             $totalImported,
             count($rollbackData)
         ) . '</p>';
@@ -1282,7 +1283,7 @@ class ProcessDataMigrator extends Process implements Module {
             // Show errors if any
             if ($hasErrors) {
                 $out .= '<div class="uk-alert uk-alert-warning" style="margin-top: 10px;">';
-                $out .= '<h4>' . $this->_('Import Errors') . '</h4>';
+                $out .= '<h4>' . $this->_('Migration Errors') . '</h4>';
                 $out .= '<ul>';
                 foreach ($tableData['errors'] as $error) {
                     $out .= '<li><strong>Row ' . $error['row'] . ':</strong> ' . $this->sanitizer->entities($error['error']) . '</li>';
@@ -1300,8 +1301,8 @@ class ProcessDataMigrator extends Process implements Module {
         // Rollback button (if rollback data available)
         if (isset($sessionData['rollback_data'])) {
             $out .= '<a href="' . $this->page->url . '?action=rollback" class="ui-button ui-priority-warning" ';
-            $out .= 'onclick="return confirm(\'' . $this->_('Delete all imported data? This cannot be undone!') . '\')">';
-            $out .= '<i class="fa fa-trash"></i> ' . $this->_('Rollback Import');
+            $out .= 'onclick="return confirm(\'' . $this->_('Delete all migrated data? This cannot be undone!') . '\')">';
+            $out .= '<i class="fa fa-trash"></i> ' . $this->_('Rollback Migration');
             $out .= '</a>';
             $out .= ' &nbsp; ';
         }
@@ -1318,7 +1319,7 @@ class ProcessDataMigrator extends Process implements Module {
      * Rollback import - delete all created items
      */
     protected function executeRollback() {
-        $this->headline('Database Import - Rollback');
+        $this->headline('Data Migration - Rollback');
 
         // Get session data
         $sessionData = $this->session->get(self::SESSION_KEY);
@@ -1360,7 +1361,7 @@ class ProcessDataMigrator extends Process implements Module {
         if (empty($result['errors'])) {
             $out .= '<div class="uk-alert uk-alert-success">';
             $out .= '<h3>' . $this->_('Rollback Completed Successfully') . '</h3>';
-            $out .= '<p>' . $this->_('All imported data has been deleted.') . '</p>';
+            $out .= '<p>' . $this->_('All migrated data has been deleted.') . '</p>';
             $out .= '</div>';
         } else {
             $out .= '<div class="uk-alert uk-alert-warning">';
@@ -1402,7 +1403,7 @@ class ProcessDataMigrator extends Process implements Module {
         // Action
         $out .= '<div class="uk-margin">';
         $out .= '<a href="' . $this->page->url . '" class="ui-button ui-priority-primary">';
-        $out .= '<i class="fa fa-upload"></i> ' . $this->_('Start New Import');
+        $out .= '<i class="fa fa-upload"></i> ' . $this->_('Start New Migration');
         $out .= '</a>';
         $out .= '</div>';
 
@@ -1422,6 +1423,39 @@ class ProcessDataMigrator extends Process implements Module {
         $this->session->remove(self::SESSION_KEY);
         $this->message($this->_('Session cleared'));
         $this->session->redirect($this->page->url);
+    }
+
+    /**
+     * Module configuration
+     */
+    public function getModuleConfigInputfields(InputfieldWrapper $inputfields) {
+        // Log Level setting
+        $f = $this->modules->get('InputfieldRadios');
+        $f->name = 'log_level';
+        $f->label = $this->_('Log Level');
+        $f->description = $this->_('Control how much information is written to the log file');
+        $f->notes = $this->_('Lower levels produce smaller log files. Higher levels help with debugging.');
+        $f->addOption(Logger::ERROR, $this->_('ERROR - Only critical errors'));
+        $f->addOption(Logger::WARNING, $this->_('WARNING - Errors and warnings'));
+        $f->addOption(Logger::INFO, $this->_('INFO - Errors, warnings, and important info (recommended)'));
+        $f->addOption(Logger::DEBUG, $this->_('DEBUG - Everything including detailed debug info'));
+        $f->value = $this->log_level ?: Logger::INFO;
+        $f->columnWidth = 100;
+        $inputfields->add($f);
+
+        return $inputfields;
+    }
+
+    /**
+     * Get logger instance with configured level
+     *
+     * @return Logger
+     */
+    protected function getLogger() {
+        $logger = $this->wire(new Logger());
+        $logger->setLevel($this->log_level ?: Logger::INFO);
+        $logger->setLogName('data-migrator');
+        return $logger;
     }
 
     /**

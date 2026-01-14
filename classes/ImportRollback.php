@@ -4,7 +4,7 @@ namespace ProcessWire;
 
 /**
  * Import Rollback Manager
- * Tracks and reverses database imports
+ * Tracks and reverses data migrations
  */
 class ImportRollback extends WireData {
 
@@ -54,7 +54,7 @@ class ImportRollback extends WireData {
                         // Walk up and delete empty container parents
                         $currentParent = $parent->parent;
                         while ($currentParent && $currentParent->id && $currentParent->id != 1) {
-                            if ($currentParent->template->name === 'import-container') {
+                            if ($currentParent->template->name === 'migration-container') {
                                 // CRITICAL: Use actual count, not cached
                                 $containerChildCount = $this->wire('pages')->count("parent={$currentParent->id}");
 
@@ -161,9 +161,9 @@ class ImportRollback extends WireData {
             }
         }
 
-        // Delete import-container template if not used by any pages
+        // Delete migration-container template if not used by any pages
         try {
-            $containerTemplate = $this->wire('templates')->get('import-container');
+            $containerTemplate = $this->wire('templates')->get('migration-container');
             if ($containerTemplate && $containerTemplate->id) {
                 $numPages = $this->wire('pages')->count("template=$containerTemplate");
                 if ($numPages == 0) {
@@ -174,7 +174,7 @@ class ImportRollback extends WireData {
                 }
             }
         } catch (\Exception $e) {
-            $result['errors'][] = "Failed to delete import-container template: " . $e->getMessage();
+            $result['errors'][] = "Failed to delete migration-container template: " . $e->getMessage();
         }
 
         return $result;

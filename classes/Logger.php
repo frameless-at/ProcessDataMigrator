@@ -3,7 +3,7 @@
 namespace ProcessWire;
 
 /**
- * Configurable Logger for Database Importer
+ * Configurable Logger for Data Migrator
  *
  * Provides different log levels to control verbosity:
  * - ERROR: Only critical errors
@@ -19,7 +19,7 @@ class Logger extends WireData {
     const DEBUG = 4;
 
     protected $level = self::INFO; // Default: INFO level
-    protected $logName = 'db-importer';
+    protected $logName = 'data-migrator';
 
     /**
      * Set log level

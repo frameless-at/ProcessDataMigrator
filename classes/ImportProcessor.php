@@ -3,7 +3,7 @@
 namespace ProcessWire;
 
 /**
- * Import Processor for Database Importer
+ * Import Processor for Data Migrator
  * Creates pages from imported data
  */
 class ImportProcessor extends WireData {

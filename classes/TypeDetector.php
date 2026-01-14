@@ -215,11 +215,16 @@ class TypeDetector extends WireData {
                 continue;
             }
 
-            // Check boolean (must be exact match)
-            if ($value === '0' || $value === '1' ||
-                $value === 'true' || $value === 'false' ||
-                $value === true || $value === false ||
-                $value === 0 || $value === 1) {
+            // Check boolean - ONLY string representations like 'true'/'false'
+            // Numeric 0/1 should NOT be auto-detected as boolean here
+            // (that's handled by detectBooleanField() with SQL type context)
+            $lowerVal = is_string($value) ? strtolower($value) : null;
+            if ($lowerVal !== null && in_array($lowerVal, ['true', 'false', 'yes', 'no', 'ja', 'nein'], true)) {
+                $boolCount++;
+                continue;
+            }
+            // PHP native booleans (from JSON parsing)
+            if ($value === true || $value === false) {
                 $boolCount++;
                 continue;
             }

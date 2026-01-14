@@ -1,5 +1,5 @@
 /**
- * Smart Checkbox Logic for Database Importer
+ * Smart Checkbox Logic for Data Migrator
  * Handles table and field checkbox interactions
  */
 
@@ -89,7 +89,7 @@ document.addEventListener('DOMContentLoaded', function() {
             checkbox.addEventListener('change', onFieldCheckboxChange);
         });
 
-        console.log('Database Importer: Smart checkbox logic initialized');
+        console.log('Data Migrator: Smart checkbox logic initialized');
         console.log('- Table checkboxes: ' + tableCheckboxes.length);
         console.log('- Field checkboxes: ' + allFieldCheckboxes.length);
     }
