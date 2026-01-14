@@ -168,7 +168,7 @@ class ProcessDataMigrator extends Process implements Module, ConfigurableModule 
      * Step 1: Upload file
      */
     protected function executeUpload() {
-        $this->headline('Database Import - Upload');
+        $this->headline('Data Migration - Upload');
 
         // Build form first
         $form = $this->buildUploadForm();
@@ -232,7 +232,7 @@ class ProcessDataMigrator extends Process implements Module, ConfigurableModule 
      * Step 2: Analyze and show results
      */
     protected function executeAnalyze() {
-        $this->headline('Database Import - Analyze');
+        $this->headline('Data Migration - Analyze');
 
         $sessionData = $this->session->get(self::SESSION_KEY);
         $analysis = $sessionData['analysis'] ?? [];
@@ -395,7 +395,7 @@ class ProcessDataMigrator extends Process implements Module, ConfigurableModule 
         $allTableNames = array_keys($analysis);
 
         $out = '<form method="post" action="' . $this->page->url . '">';
-        $out .= '<div class="database-importer-analysis">';
+        $out .= '<div class="data-migrator-analysis">';
         // Summary
         $totalRows = array_sum(array_column($analysis, 'row_count'));
         $totalColumns = array_sum(array_map(function($table) {
@@ -860,7 +860,7 @@ class ProcessDataMigrator extends Process implements Module, ConfigurableModule 
      * Execute dry run (preview without actual import)
      */
     protected function executeDryRun() {
-        $this->headline('Database Import - Dry Run Preview');
+        $this->headline('Data Migration - Dry Run Preview');
 
         // Get session data
         $sessionData = $this->session->get(self::SESSION_KEY);
@@ -988,7 +988,7 @@ class ProcessDataMigrator extends Process implements Module, ConfigurableModule 
      * Execute import process
      */
     protected function executeImport() {
-        $this->headline('Database Import - Processing');
+        $this->headline('Data Migration - Processing');
 
         // Get session data
         $sessionData = $this->session->get(self::SESSION_KEY);
@@ -1236,7 +1236,7 @@ class ProcessDataMigrator extends Process implements Module, ConfigurableModule 
      * Show import results
      */
     protected function executeImportResult() {
-        $this->headline('Database Import - Results');
+        $this->headline('Data Migration - Results');
 
         // Get session data
         $sessionData = $this->session->get(self::SESSION_KEY);
@@ -1319,7 +1319,7 @@ class ProcessDataMigrator extends Process implements Module, ConfigurableModule 
      * Rollback import - delete all created items
      */
     protected function executeRollback() {
-        $this->headline('Database Import - Rollback');
+        $this->headline('Data Migration - Rollback');
 
         // Get session data
         $sessionData = $this->session->get(self::SESSION_KEY);
