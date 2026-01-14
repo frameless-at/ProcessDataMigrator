@@ -532,6 +532,23 @@ class TypeDetector extends WireData {
         $sqlType = $columnInfo['type'] ?? '';
         $name = strtolower($columnName);
 
+        // CRITICAL: Blacklist - Fields that should NEVER be boolean
+        // Even if they have binary values (0/1, 1/2, etc.)
+        $neverBooleanPatterns = [
+            'quantity', 'qty', 'amount', 'count', 'total', 'sum',
+            'id', 'age', 'year', 'month', 'day',
+            'price', 'cost', 'value', 'rate',
+            'number', 'num', 'index', 'position', 'rank',
+            'level', 'priority', 'order', 'sort',
+            'weight', 'size', 'length', 'width', 'height',
+        ];
+
+        foreach ($neverBooleanPatterns as $pattern) {
+            if (strpos($name, $pattern) !== false) {
+                return ['is_boolean' => false];
+            }
+        }
+
         // Check for tinyint(1) - MySQL standard for boolean
         $isTinyInt = stripos($sqlType, 'tinyint(1)') !== false;
 
