@@ -22,7 +22,7 @@ require_once(__DIR__ . '/classes/ImportRollback.php');
  * @author ProcessWire
  * @version 1.1.0
  */
-class ProcessDataMigrator extends Process implements Module {
+class ProcessDataMigrator extends Process implements Module, ConfigurableModule {
 
     /**
      * Module information
@@ -1422,6 +1422,39 @@ class ProcessDataMigrator extends Process implements Module {
         $this->session->remove(self::SESSION_KEY);
         $this->message($this->_('Session cleared'));
         $this->session->redirect($this->page->url);
+    }
+
+    /**
+     * Module configuration
+     */
+    public function getModuleConfigInputfields(InputfieldWrapper $inputfields) {
+        // Log Level setting
+        $f = $this->modules->get('InputfieldRadios');
+        $f->name = 'log_level';
+        $f->label = $this->_('Log Level');
+        $f->description = $this->_('Control how much information is written to the log file');
+        $f->notes = $this->_('Lower levels produce smaller log files. Higher levels help with debugging.');
+        $f->addOption(Logger::ERROR, $this->_('ERROR - Only critical errors'));
+        $f->addOption(Logger::WARNING, $this->_('WARNING - Errors and warnings'));
+        $f->addOption(Logger::INFO, $this->_('INFO - Errors, warnings, and important info (recommended)'));
+        $f->addOption(Logger::DEBUG, $this->_('DEBUG - Everything including detailed debug info'));
+        $f->value = $this->log_level ?: Logger::INFO;
+        $f->columnWidth = 100;
+        $inputfields->add($f);
+
+        return $inputfields;
+    }
+
+    /**
+     * Get logger instance with configured level
+     *
+     * @return Logger
+     */
+    protected function getLogger() {
+        $logger = $this->wire(new Logger());
+        $logger->setLevel($this->log_level ?: Logger::INFO);
+        $logger->setLogName('data-migrator');
+        return $logger;
     }
 
     /**
