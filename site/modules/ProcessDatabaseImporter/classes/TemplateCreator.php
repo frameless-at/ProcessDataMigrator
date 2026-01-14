@@ -740,11 +740,11 @@ if(\${$varName}) {
 HTML;
         }
 
-        // Options/Select fields - display with badge styling
+        // Options/Select fields
         if ($fieldtype === 'FieldtypeOptions') {
             return <<<HTML
 if(\${$varName}) {
-    \$content .= '<p><strong>{$safeLabel}:</strong> <span style="background: #e0e0e0; padding: 2px 8px; border-radius: 3px;">' . \${$varName} . '</span></p>';
+    \$content .= '<p><strong>{$safeLabel}:</strong> ' . \${$varName} . '</p>';
 }
 HTML;
         }
