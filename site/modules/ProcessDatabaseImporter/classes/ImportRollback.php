@@ -77,11 +77,46 @@ class ImportRollback extends WireData {
             }
         }
 
-        // Delete template (must be before fields)
+        // Delete templates (both detail and list templates)
+        // CRITICAL: Delete list_template first, then detail template
+        if (isset($rollbackData['list_template'])) {
+            try {
+                $listTemplate = $this->wire('templates')->get($rollbackData['list_template']);
+                if ($listTemplate && $listTemplate->id) {
+                    $templateName = $listTemplate->name;
+
+                    // Remove all fields from fieldgroup first
+                    foreach ($listTemplate->fieldgroup as $field) {
+                        if ($field->name !== 'title') { // Keep title
+                            $listTemplate->fieldgroup->remove($field);
+                        }
+                    }
+                    $listTemplate->fieldgroup->save();
+
+                    // Delete template and fieldgroup
+                    $fieldgroup = $listTemplate->fieldgroup;
+                    $this->wire('templates')->delete($listTemplate);
+                    $this->wire('fieldgroups')->delete($fieldgroup);
+                    $result['templates_deleted']++;
+
+                    // Delete physical template file
+                    $templateFile = $this->wire('config')->paths->templates . $templateName . '.php';
+                    if (file_exists($templateFile)) {
+                        @unlink($templateFile);
+                    }
+                }
+            } catch (\Exception $e) {
+                $result['errors'][] = "Failed to delete list template: " . $e->getMessage();
+            }
+        }
+
+        // Delete detail template (must be before fields)
         if (isset($rollbackData['template'])) {
             try {
                 $template = $this->wire('templates')->get($rollbackData['template']);
                 if ($template && $template->id) {
+                    $templateName = $template->name;
+
                     // Remove all fields from fieldgroup first
                     foreach ($template->fieldgroup as $field) {
                         if ($field->name !== 'title') { // Keep title
@@ -95,9 +130,15 @@ class ImportRollback extends WireData {
                     $this->wire('templates')->delete($template);
                     $this->wire('fieldgroups')->delete($fieldgroup);
                     $result['templates_deleted']++;
+
+                    // Delete physical template file
+                    $templateFile = $this->wire('config')->paths->templates . $templateName . '.php';
+                    if (file_exists($templateFile)) {
+                        @unlink($templateFile);
+                    }
                 }
             } catch (\Exception $e) {
-                $result['errors'][] = "Failed to delete template: " . $e->getMessage();
+                $result['errors'][] = "Failed to delete detail template: " . $e->getMessage();
             }
         }
 
