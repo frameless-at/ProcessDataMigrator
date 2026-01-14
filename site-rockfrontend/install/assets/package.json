@@ -1,8 +1,0 @@
-{
-  "devDependencies": {
-    "tailwindcss": "^3"
-  },
-  "scripts": {
-    "build": "npx tailwindcss -i site/templates/_tailwind.css -o site/templates/bundle/tailwind.css"
-  }
-}
