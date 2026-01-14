@@ -658,8 +658,13 @@ PHP;
      * Generate clean variable name from column name
      */
     protected function generateVarName($columnName) {
+        // CRITICAL: Replace dots with underscores FIRST
+        // JSON/XML parsers flatten nested objects using dot notation (e.g., "shipping_address.street")
+        // PHP doesn't allow dots in variable names, so convert to underscores
+        $name = str_replace('.', '_', $columnName);
+
         // Remove common prefixes/suffixes
-        $name = preg_replace('/^(field_|tbl_|db_)/', '', $columnName);
+        $name = preg_replace('/^(field_|tbl_|db_)/', '', $name);
         $name = preg_replace('/(_id|_key|_fk)$/', '', $name);
 
         // Convert to camelCase
@@ -676,7 +681,10 @@ PHP;
      * Sanitize label for display
      */
     protected function sanitizeLabel($columnName) {
-        $label = str_replace('_', ' ', $columnName);
+        // Convert dots to spaces (for nested JSON/XML fields)
+        $label = str_replace('.', ' ', $columnName);
+        // Convert underscores to spaces
+        $label = str_replace('_', ' ', $label);
         return ucwords($label);
     }
 
