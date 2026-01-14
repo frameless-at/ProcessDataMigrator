@@ -9,29 +9,55 @@ class TypeDetector extends WireData {
 
     /**
      * Pattern definitions for type detection
+     * CRITICAL: Order matters! More specific patterns MUST come first
      */
     protected $patterns = [
-        // CRITICAL: Order matters! More specific patterns MUST come first
-        // Date patterns BEFORE phone patterns (dates can match phone regex)
+        // Email - very specific pattern
         'email' => '/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/i',
+
+        // URL - must start with protocol
         'url' => '/^https?:\/\/.+/i',
-        'date_iso' => '/^\d{4}-\d{2}-\d{2}$/',
-        'date_de' => '/^\d{2}\.\d{2}\.\d{4}$/',
-        'date_us' => '/^\d{2}\/\d{2}\/\d{4}$/',
-        'datetime_iso' => '/^\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}$/',
-        'time' => '/^\d{2}:\d{2}(:\d{2})?$/',
-        'phone_de' => '/^(\+49|0)[0-9\s\-\/()]{7,}$/',
-        'phone_intl' => '/^\+?[0-9\s\(\)]{7,}$/',  // More restrictive: no dashes, requires + or spaces/parens
+
+        // Date patterns BEFORE phone patterns (dates can match phone regex)
+        // ISO format with validation (YYYY-MM-DD, month 01-12, day 01-31)
+        'date_iso' => '/^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/',
+        // German format with validation (DD.MM.YYYY)
+        'date_de' => '/^(0[1-9]|[12]\d|3[01])\.(0[1-9]|1[0-2])\.(\d{4})$/',
+        // US format with validation (MM/DD/YYYY)
+        'date_us' => '/^(0[1-9]|1[0-2])\/(0[1-9]|[12]\d|3[01])\/(\d{4})$/',
+        // Datetime ISO format
+        'datetime_iso' => '/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])\s([01]\d|2[0-3]):[0-5]\d:[0-5]\d$/',
+        // Time only (HH:MM or HH:MM:SS)
+        'time' => '/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/',
+
+        // Phone patterns - MUST contain + or country code, or start with 0
+        // German phone: +49 or 0 prefix required
+        'phone_de' => '/^(\+49|0049|0)[1-9][0-9\s\-\/()]{6,}$/',
+        // International phone: MUST start with + followed by country code
+        'phone_intl' => '/^\+[1-9][0-9]{0,2}[\s\-]?[0-9\s\-\(\)]{6,}$/',
+
+        // HTML content
         'html' => '/<[a-z][\s\S]*>/i',
-        'json' => '/^[\{\[].*[\}\]]$/s',
-        'image_url' => '/\.(jpg|jpeg|png|gif|webp|svg)$/i',
-        'file_url' => '/\.(pdf|doc|docx|xls|xlsx|zip|rar)$/i',
-        'hex_color' => '/^#[0-9a-f]{3,6}$/i',
+
+        // JSON - must be valid structure with proper brackets
+        'json' => '/^(\{[^{}]*\}|\[[^\[\]]*\])$/s',
+
+        // Image/File URLs - map to FieldtypeURL (not Image/File - those need actual uploads)
+        'image_url' => '/\.(jpg|jpeg|png|gif|webp|svg)(\?.*)?$/i',
+        'file_url' => '/\.(pdf|doc|docx|xls|xlsx|zip|rar|tar|gz)(\?.*)?$/i',
+
+        // Hex color
+        'hex_color' => '/^#([0-9a-f]{3}|[0-9a-f]{6})$/i',
+
+        // Boolean - exact matches only
         'boolean' => '/^(0|1|true|false|yes|no|ja|nein)$/i',
     ];
 
     /**
      * Fieldtype mapping for pattern matches
+     * NOTE: image_url and file_url map to URL, not Image/File
+     * because ProcessWire Image/File fields require actual file uploads,
+     * not just URLs pointing to remote files
      */
     protected $patternFieldtypeMap = [
         'email' => 'FieldtypeEmail',
@@ -45,8 +71,8 @@ class TypeDetector extends WireData {
         'time' => 'FieldtypeDatetime',
         'html' => 'FieldtypeTextarea',
         'json' => 'FieldtypeTextarea',
-        'image_url' => 'FieldtypeImage',
-        'file_url' => 'FieldtypeFile',
+        'image_url' => 'FieldtypeURL',  // URLs to images, not actual uploads
+        'file_url' => 'FieldtypeURL',   // URLs to files, not actual uploads
         'hex_color' => 'FieldtypeText',
         'boolean' => 'FieldtypeCheckbox',
     ];
@@ -120,9 +146,20 @@ class TypeDetector extends WireData {
             }
         }
 
-        // Check for options/select field - but only if not already detected as email, URL, etc.
-        // Options should not override specific types with high confidence
-        if ($result['confidence'] < 80 || $result['fieldtype'] === 'FieldtypeText') {
+        // Check for options/select field - but NEVER override specific semantic types
+        // Options should only apply to generic Text fields, not Email, URL, Datetime, etc.
+        $specificFieldtypes = [
+            'FieldtypeEmail',
+            'FieldtypeURL',
+            'FieldtypeDatetime',
+            'FieldtypeCheckbox',
+            'FieldtypeInteger',
+            'FieldtypeFloat',
+        ];
+
+        $isGenericTextType = !in_array($result['fieldtype'], $specificFieldtypes);
+
+        if ($isGenericTextType && ($result['confidence'] < 80 || $result['fieldtype'] === 'FieldtypeText')) {
             $optionsResult = $this->detectOptionsField($values);
             if ($optionsResult['is_options']) {
                 return $optionsResult;
@@ -234,14 +271,46 @@ class TypeDetector extends WireData {
      */
     protected function detectFromSqlType($baseType, $columnInfo) {
         $typeMap = [
+            // Integer types
             'integer' => ['FieldtypeInteger', 90],
+            'int' => ['FieldtypeInteger', 90],
+            'bigint' => ['FieldtypeInteger', 90],
+            'smallint' => ['FieldtypeInteger', 90],
+            'mediumint' => ['FieldtypeInteger', 90],
+            'tinyint' => ['FieldtypeInteger', 85],  // Lower confidence - could be boolean
+
+            // Float/Decimal types
             'float' => ['FieldtypeFloat', 90],
+            'double' => ['FieldtypeFloat', 90],
+            'real' => ['FieldtypeFloat', 90],
             'decimal' => ['FieldtypeFloat', 90],
+            'numeric' => ['FieldtypeFloat', 90],
+
+            // Date/Time types
             'date' => ['FieldtypeDatetime', 95],
             'datetime' => ['FieldtypeDatetime', 95],
+            'timestamp' => ['FieldtypeDatetime', 95],
             'time' => ['FieldtypeDatetime', 80],
+            'year' => ['FieldtypeInteger', 85],
+
+            // Text types
             'text' => ['FieldtypeTextarea', 85],
+            'longtext' => ['FieldtypeTextarea', 90],
+            'mediumtext' => ['FieldtypeTextarea', 85],
+            'tinytext' => ['FieldtypeText', 80],
+
+            // Binary types (store as text, user must handle)
+            'blob' => ['FieldtypeTextarea', 60],
+            'longblob' => ['FieldtypeTextarea', 60],
+            'mediumblob' => ['FieldtypeTextarea', 60],
+            'tinyblob' => ['FieldtypeTextarea', 60],
+            'binary' => ['FieldtypeText', 60],
+            'varbinary' => ['FieldtypeText', 60],
+
+            // JSON type
             'json' => ['FieldtypeTextarea', 70],
+
+            // Enum/Set types
             'enum' => ['FieldtypeOptions', 85],
             'set' => ['FieldtypeOptions', 85],
         ];
@@ -484,7 +553,18 @@ class TypeDetector extends WireData {
             return ['is_boolean' => false];
         }
 
-        // STRONGEST indicator: Values are literally boolean strings
+        // Strong indicator: tinyint(1) with boolean values - highest confidence
+        if ($isTinyInt && $areBooleanValues) {
+            return [
+                'is_boolean' => true,
+                'type' => 'boolean',
+                'confidence' => 98,
+                'fieldtype' => 'FieldtypeCheckbox',
+                'patterns' => ['tinyint(1)', 'boolean_values']
+            ];
+        }
+
+        // Values are literally boolean strings (true/false, yes/no, etc.)
         // This catches "true"/"false" from JSON/XML, regardless of field name
         if ($areBooleanValues) {
             return [
@@ -493,17 +573,6 @@ class TypeDetector extends WireData {
                 'confidence' => 95,
                 'fieldtype' => 'FieldtypeCheckbox',
                 'patterns' => ['boolean_values']
-            ];
-        }
-
-        // Strong indicator: tinyint(1) with boolean values
-        if ($isTinyInt && $areBooleanValues) {
-            return [
-                'is_boolean' => true,
-                'type' => 'boolean',
-                'confidence' => 95,
-                'fieldtype' => 'FieldtypeCheckbox',
-                'patterns' => ['tinyint(1)', 'boolean_values']
             ];
         }
 
