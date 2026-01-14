@@ -697,6 +697,9 @@ PHP;
                 return "\$page->{$fieldName} ? date('Y-m-d H:i', \$page->{$fieldName}) : ''";
             case 'FieldtypeCheckbox':
                 return "\$page->{$fieldName} ? 'Yes' : 'No'";
+            case 'FieldtypeOptions':
+                // Options field returns SelectableOption object - get title for display
+                return "\$page->{$fieldName} ? \$page->{$fieldName}->title : ''";
             case 'FieldtypeTextarea':
                 return "\$page->{$fieldName}";
             default:
@@ -733,6 +736,15 @@ HTML;
             return <<<HTML
 if(\${$varName}) {
     \$content .= '<p><strong>{$safeLabel}:</strong> <a href="' . \${$varName} . '" target="_blank">' . \${$varName} . '</a></p>';
+}
+HTML;
+        }
+
+        // Options/Select fields - display with badge styling
+        if ($fieldtype === 'FieldtypeOptions') {
+            return <<<HTML
+if(\${$varName}) {
+    \$content .= '<p><strong>{$safeLabel}:</strong> <span style="background: #e0e0e0; padding: 2px 8px; border-radius: 3px;">' . \${$varName} . '</span></p>';
 }
 HTML;
         }
