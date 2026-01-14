@@ -532,25 +532,45 @@ class TypeDetector extends WireData {
         $sqlType = $columnInfo['type'] ?? '';
         $name = strtolower($columnName);
 
-        // CRITICAL: Blacklist - Fields that should NEVER be boolean
-        // Even if they have binary values (0/1, 1/2, etc.)
-        $neverBooleanPatterns = [
-            'quantity', 'qty', 'amount', 'count', 'total', 'sum',
-            'id', 'age', 'year', 'month', 'day',
-            'price', 'cost', 'value', 'rate',
-            'number', 'num', 'index', 'position', 'rank',
-            'level', 'priority', 'order', 'sort',
-            'weight', 'size', 'length', 'width', 'height',
-        ];
+        // Check for tinyint(1) - MySQL standard for boolean
+        $isTinyInt = stripos($sqlType, 'tinyint(1)') !== false;
 
-        foreach ($neverBooleanPatterns as $pattern) {
-            if (strpos($name, $pattern) !== false) {
-                return ['is_boolean' => false];
+        // Check values - must be EXACTLY 2 unique values AND they must be boolean-like
+        $unique = array_unique($values);
+        $uniqueCount = count($unique);
+
+        // CRITICAL: Check if unique values are ACTUALLY boolean values
+        // "1, 2" is NOT boolean, but "0, 1" IS boolean!
+        $areBooleanValues = false;
+        if ($uniqueCount <= 2 && $uniqueCount > 0) {
+            $normalizedUnique = array_map(function($v) {
+                return strtolower(trim((string)$v));
+            }, $unique);
+
+            // VALID boolean value sets
+            $validBooleanSets = [
+                ['0', '1'],           // 0/1
+                ['true', 'false'],    // true/false
+                ['yes', 'no'],        // yes/no
+                ['ja', 'nein'],       // German
+                ['0'],                // Only zeros
+                ['1'],                // Only ones
+                ['true'],             // Only true
+                ['false'],            // Only false
+            ];
+
+            foreach ($validBooleanSets as $validSet) {
+                if (count(array_diff($normalizedUnique, $validSet)) === 0) {
+                    $areBooleanValues = true;
+                    break;
+                }
             }
         }
 
-        // Check for tinyint(1) - MySQL standard for boolean
-        $isTinyInt = stripos($sqlType, 'tinyint(1)') !== false;
+        // If values are NOT boolean-like (e.g., "1, 2" or "5, 10"), this is NOT a boolean field
+        if ($uniqueCount <= 2 && !$areBooleanValues) {
+            return ['is_boolean' => false];
+        }
 
         // Check for boolean-like column names
         $booleanPrefixes = ['is_', 'has_', 'can_', 'should_', 'will_', 'does_'];
@@ -576,32 +596,6 @@ class TypeDetector extends WireData {
             $hasBooleanName = true;
         }
 
-        // Check values - should only be 0/1 or true/false
-        $unique = array_unique($values);
-        $uniqueCount = count($unique);
-        $isBinaryValues = $uniqueCount <= 2;
-
-        // CRITICAL: Check if values are actually boolean strings
-        // If values are "true"/"false" or "0"/"1", it's DEFINITELY boolean
-        $areBooleanValues = false;
-        if ($isBinaryValues && $uniqueCount > 0) {
-            $normalizedUnique = array_map(function($v) {
-                return strtolower(trim($v));
-            }, $unique);
-
-            $booleanStrings = ['0', '1', 'true', 'false', 'yes', 'no', 'ja', 'nein'];
-            $allAreBooleanLike = true;
-
-            foreach ($normalizedUnique as $val) {
-                if (!in_array($val, $booleanStrings)) {
-                    $allAreBooleanLike = false;
-                    break;
-                }
-            }
-
-            $areBooleanValues = $allAreBooleanLike;
-        }
-
         // STRONGEST indicator: Values are literally boolean strings
         // This catches "true"/"false" from JSON/XML, regardless of field name
         if ($areBooleanValues) {
@@ -625,25 +619,25 @@ class TypeDetector extends WireData {
             ];
         }
 
-        // Medium indicator: tinyint(1) with binary values
-        if ($isTinyInt && $isBinaryValues) {
+        // Medium indicator: tinyint(1) with boolean values
+        if ($isTinyInt && $areBooleanValues) {
             return [
                 'is_boolean' => true,
                 'type' => 'boolean',
                 'confidence' => 90,
                 'fieldtype' => 'FieldtypeCheckbox',
-                'patterns' => ['tinyint(1)', 'binary_values']
+                'patterns' => ['tinyint(1)', 'boolean_values']
             ];
         }
 
-        // Weak indicator: boolean name with binary values
-        if ($hasBooleanName && $isBinaryValues) {
+        // Weak indicator: boolean name with boolean values
+        if ($hasBooleanName && $areBooleanValues) {
             return [
                 'is_boolean' => true,
                 'type' => 'boolean',
                 'confidence' => 85,
                 'fieldtype' => 'FieldtypeCheckbox',
-                'patterns' => ['boolean_name', 'binary_values']
+                'patterns' => ['boolean_name', 'boolean_values']
             ];
         }
 
