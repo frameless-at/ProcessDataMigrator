@@ -1,0 +1,20 @@
+{
+  "title": "Data Migrator",
+  "summary": "Migrate external data (SQL, CSV, JSON, XML) into ProcessWire",
+  "version": "1.1.0",
+  "author": "ProcessWire",
+  "icon": "exchange",
+  "permission": "data-migrate",
+  "permissions": {
+    "data-migrate": "Migrate external data into ProcessWire"
+  },
+  "page": {
+    "name": "data-migrator",
+    "parent": "setup",
+    "title": "Data Migrator"
+  },
+  "requires": [
+    "PHP>=7.4",
+    "ProcessWire>=3.0.0"
+  ]
+}

@@ -15,33 +15,33 @@ require_once(__DIR__ . '/classes/ImportProcessor.php');
 require_once(__DIR__ . '/classes/ImportRollback.php');
 
 /**
- * ProcessWire Database Importer
+ * ProcessWire Data Migrator
  *
- * Import data from database dumps (SQL, CSV, JSON, XML) into ProcessWire
+ * Migrate external data (SQL, CSV, JSON, XML) into ProcessWire
  *
  * @author ProcessWire
- * @version 1.0.0
+ * @version 1.1.0
  */
-class ProcessDatabaseImporter extends Process implements Module {
+class ProcessDataMigrator extends Process implements Module {
 
     /**
      * Module information
      */
     public static function getModuleInfo() {
         return [
-            'title' => 'Database Importer',
-            'summary' => 'Import data from database dumps into ProcessWire',
-            'version' => '1.0.0',
+            'title' => 'Data Migrator',
+            'summary' => 'Migrate external data (SQL, CSV, JSON, XML) into ProcessWire',
+            'version' => '1.1.0',
             'author' => 'ProcessWire',
-            'icon' => 'database',
-            'permission' => 'database-import',
+            'icon' => 'exchange',
+            'permission' => 'data-migrate',
             'permissions' => [
-                'database-import' => 'Import database data'
+                'data-migrate' => 'Migrate external data into ProcessWire'
             ],
             'page' => [
-                'name' => 'database-importer',
+                'name' => 'data-migrator',
                 'parent' => 'setup',
-                'title' => 'Database Importer'
+                'title' => 'Data Migrator'
             ],
             'requires' => [
                 'PHP>=7.4',
@@ -58,7 +58,7 @@ class ProcessDatabaseImporter extends Process implements Module {
     /**
      * Session key for storing analysis data
      */
-    const SESSION_KEY = 'DatabaseImporter';
+    const SESSION_KEY = 'DataMigrator';
 
     /**
      * Initialize the module
@@ -67,13 +67,13 @@ class ProcessDatabaseImporter extends Process implements Module {
         parent::init();
 
         // Set uploads directory
-        $this->uploadsPath = $this->config->paths->cache . 'DatabaseImporter/';
+        $this->uploadsPath = $this->config->paths->cache . 'DataMigrator/';
         if (!is_dir($this->uploadsPath)) {
             wireMkdir($this->uploadsPath, true);
         }
 
         // Load CSS
-        $cssUrl = $this->config->urls->siteModules . 'ProcessDatabaseImporter/assets/css/database-importer.css';
+        $cssUrl = $this->config->urls->siteModules . 'ProcessDataMigrator/assets/css/data-migrator.css';
         $this->config->styles->add($cssUrl);
     }
 
@@ -1429,22 +1429,22 @@ class ProcessDatabaseImporter extends Process implements Module {
      */
     public function ___install() {
         // Create uploads directory
-        $uploadsPath = $this->config->paths->cache . 'DatabaseImporter/';
+        $uploadsPath = $this->config->paths->cache . 'DataMigrator/';
         if (!is_dir($uploadsPath)) {
             wireMkdir($uploadsPath, true);
         }
 
         // Create permission
-        $permission = $this->permissions->get('database-import');
+        $permission = $this->permissions->get('data-migrate');
         if (!$permission->id) {
-            $permission = $this->permissions->add('database-import');
-            $permission->title = 'Database Import';
+            $permission = $this->permissions->add('data-migrate');
+            $permission->title = 'Data Migration';
             $permission->save();
-            $this->message("Created permission: database-import");
+            $this->message("Created permission: data-migrate");
         }
 
         // Create admin page
-        $page = $this->pages->get('template=admin, name=database-importer');
+        $page = $this->pages->get('template=admin, name=data-migrator');
         if (!$page->id) {
             // Get setup page as parent
             $parent = $this->pages->get($this->config->adminRootPageID)->child('name=setup');
@@ -1455,8 +1455,8 @@ class ProcessDatabaseImporter extends Process implements Module {
             $page = new Page();
             $page->template = 'admin';
             $page->parent = $parent;
-            $page->name = 'database-importer';
-            $page->title = 'Database Importer';
+            $page->name = 'data-migrator';
+            $page->title = 'Data Migrator';
             $page->process = $this;
             $page->save();
 
@@ -1469,16 +1469,16 @@ class ProcessDatabaseImporter extends Process implements Module {
      */
     public function ___uninstall() {
         // Remove uploads directory
-        $uploadsPath = $this->config->paths->cache . 'DatabaseImporter/';
+        $uploadsPath = $this->config->paths->cache . 'DataMigrator/';
         if (is_dir($uploadsPath)) {
             wireRmdir($uploadsPath, true);
         }
 
         // Remove admin page
-        $page = $this->pages->get('template=admin, name=database-importer');
+        $page = $this->pages->get('template=admin, name=data-migrator');
         if ($page->id) {
             $this->pages->delete($page, true);
-            $this->message("Removed page: database-importer");
+            $this->message("Removed page: data-migrator");
         }
 
         // Note: We don't remove the permission as it might be in use
