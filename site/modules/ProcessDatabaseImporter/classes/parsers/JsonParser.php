@@ -15,6 +15,7 @@ class JsonParser extends AbstractParser {
     protected $metadata = [];
     protected $tables = [];
     protected $logger = null;
+    protected $childTables = []; // Track child tables (arrays within objects)
 
     /**
      * Set logger instance
@@ -131,22 +132,46 @@ class JsonParser extends AbstractParser {
 
     /**
      * Create table from array of objects
+     * Also extracts nested arrays as separate child tables with FK relations
      */
     protected function createTableFromArray($tableName, $array, $sampleSize) {
         if (empty($array)) {
             return;
         }
 
+        // Detect primary key field from data
+        $pkField = 'id';
+        $first = reset($array);
+        if (is_array($first)) {
+            if (isset($first['id'])) {
+                $pkField = 'id';
+            } else {
+                // Find first field ending with _id
+                foreach (array_keys($first) as $key) {
+                    if (preg_match('/_id$/i', $key)) {
+                        $pkField = $key;
+                        break;
+                    }
+                }
+            }
+        }
+
         // Flatten nested objects and collect all unique keys
+        // Also detect and extract child arrays
         $allKeys = [];
         $flattenedData = [];
+        $childArrays = []; // Arrays found in objects
 
-        foreach ($array as $item) {
+        foreach ($array as $index => $item) {
             if (!is_array($item)) {
                 continue;
             }
 
-            $flattened = $this->flattenObject($item);
+            // Get the parent ID for FK relations
+            $parentId = $item[$pkField] ?? $index;
+
+            // Flatten and extract child arrays
+            $flattened = $this->flattenObjectAndExtractArrays($item, $parentId, $tableName, $childArrays);
             $flattenedData[] = $flattened;
 
             foreach (array_keys($flattened) as $key) {
@@ -159,6 +184,11 @@ class JsonParser extends AbstractParser {
             if (count($flattenedData) >= $sampleSize) {
                 break;
             }
+        }
+
+        // Create child tables from extracted arrays
+        foreach ($childArrays as $childName => $childData) {
+            $this->createChildTable($tableName, $childName, $childData, $sampleSize);
         }
 
         // Build structure
@@ -240,7 +270,71 @@ class JsonParser extends AbstractParser {
     }
 
     /**
-     * Flatten nested object to dot notation
+     * Flatten nested object AND extract arrays as separate tables
+     *
+     * @param array $object Object to flatten
+     * @param mixed $parentId Parent ID for FK relations
+     * @param string $parentTable Parent table name
+     * @param array &$childArrays Reference to collect child arrays
+     * @param string $prefix Prefix for nested keys
+     * @return array Flattened object (without arrays)
+     */
+    protected function flattenObjectAndExtractArrays($object, $parentId, $parentTable, &$childArrays, $prefix = '') {
+        $result = [];
+
+        foreach ($object as $key => $value) {
+            $newKey = $prefix ? $prefix . '.' . $key : $key;
+
+            // CRITICAL: Detect arrays of objects - extract as child table
+            if (is_array($value) && $this->isArrayOfObjects($value)) {
+                // This is an array of objects - extract to separate table
+                $childTableName = $key;
+
+                if (!isset($childArrays[$childTableName])) {
+                    $childArrays[$childTableName] = [];
+                }
+
+                // Add parent_id to each child item
+                foreach ($value as $childItem) {
+                    if (is_array($childItem)) {
+                        $childItem[$parentTable . '_id'] = $parentId;
+                        $childArrays[$childTableName][] = $childItem;
+                    }
+                }
+
+                // DON'T add to result - this field becomes a separate table
+                continue;
+            }
+
+            // Nested object (not array of objects) - flatten recursively
+            if (is_array($value) && !$this->isSequentialArray($value)) {
+                $result = array_merge($result, $this->flattenObjectAndExtractArrays(
+                    $value,
+                    $parentId,
+                    $parentTable,
+                    $childArrays,
+                    $newKey
+                ));
+            } else {
+                // Scalar value or simple array
+                if (is_array($value)) {
+                    // Simple sequential array (not objects) - keep as JSON for now
+                    $result[$newKey] = json_encode($value);
+                } elseif (is_bool($value)) {
+                    $result[$newKey] = $value ? 'true' : 'false';
+                } elseif ($value === null) {
+                    $result[$newKey] = null;
+                } else {
+                    $result[$newKey] = $value;
+                }
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Flatten nested object to dot notation (legacy method, kept for compatibility)
      * Example: {user: {name: "John"}} => {user.name: "John"}
      */
     protected function flattenObject($object, $prefix = '') {
@@ -267,6 +361,94 @@ class JsonParser extends AbstractParser {
         }
 
         return $result;
+    }
+
+    /**
+     * Create child table from extracted array
+     *
+     * @param string $parentTable Parent table name
+     * @param string $childName Child array name (e.g., "items")
+     * @param array $childData Array of child objects with parent_id
+     * @param int $sampleSize Sample size for analysis
+     */
+    protected function createChildTable($parentTable, $childName, $childData, $sampleSize) {
+        if (empty($childData)) {
+            return;
+        }
+
+        // Generate child table name: parent_childname (e.g., "order_items")
+        $childTableName = $parentTable . '_' . $childName;
+
+        // Flatten child objects
+        $allKeys = [];
+        $flattenedData = [];
+
+        foreach ($childData as $index => $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+
+            // Add auto-increment ID if not present
+            if (!isset($item['id'])) {
+                $item['id'] = $index + 1;
+            }
+
+            // Flatten nested objects in child items
+            $childArraysIgnored = []; // We don't support 3+ levels
+            $flattened = $this->flattenObjectAndExtractArrays(
+                $item,
+                null,
+                $childTableName,
+                $childArraysIgnored
+            );
+
+            $flattenedData[] = $flattened;
+
+            foreach (array_keys($flattened) as $key) {
+                if (!in_array($key, $allKeys)) {
+                    $allKeys[] = $key;
+                }
+            }
+
+            if (count($flattenedData) >= $sampleSize) {
+                break;
+            }
+        }
+
+        // Build structure
+        $structure = [];
+        foreach ($allKeys as $columnName) {
+            $structure[$columnName] = [
+                'name' => $columnName,
+                'type' => 'string',
+                'base_type' => 'string',
+                'nullable' => true,
+                'auto_increment' => false,
+                'default' => null,
+            ];
+        }
+
+        // Find primary key
+        $primaryKey = null;
+        if (in_array('id', $allKeys)) {
+            $primaryKey = 'id';
+        }
+
+        $this->tables[$childTableName] = [
+            'name' => $childTableName,
+            'structure' => $structure,
+            'data' => $flattenedData,
+            'row_count' => count($childData),
+            'primary_key' => $primaryKey,
+            'parent_table' => $parentTable, // Mark this as a child table
+            'fk_field' => $parentTable . '_id', // FK field name
+        ];
+
+        // Track this as a child table
+        $this->childTables[$childTableName] = [
+            'parent' => $parentTable,
+            'fk_field' => $parentTable . '_id',
+        ];
     }
 
     /**
@@ -316,5 +498,14 @@ class JsonParser extends AbstractParser {
      */
     public function getTable($tableName) {
         return $this->tables[$tableName] ?? null;
+    }
+
+    /**
+     * Get child tables info (for FK detection)
+     *
+     * @return array Array of child table info: ['child_table' => ['parent' => 'parent_table', 'fk_field' => 'parent_id']]
+     */
+    public function getChildTables() {
+        return $this->childTables;
     }
 }
