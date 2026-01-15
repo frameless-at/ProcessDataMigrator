@@ -20,8 +20,8 @@ require_once(__DIR__ . '/classes/Logger.php');
  *
  * Migrate external data (SQL, CSV, JSON, XML) into ProcessWire
  *
- * @author ProcessWire
- * @version 1.1.0
+ * @author frameless Media
+ * @version 1.1.1
  */
 class ProcessDataMigrator extends Process implements Module, ConfigurableModule {
 
@@ -32,7 +32,7 @@ class ProcessDataMigrator extends Process implements Module, ConfigurableModule 
         return [
             'title' => 'Data Migrator',
             'summary' => 'Migrate external data (SQL, CSV, JSON, XML) into ProcessWire',
-            'version' => '1.1.0',
+            'version' => '1.1.1',
             'author' => 'ProcessWire',
             'icon' => 'exchange',
             'permission' => 'data-migrate',
