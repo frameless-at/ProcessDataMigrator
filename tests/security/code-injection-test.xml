@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Code Injection Test File
+  ========================
+  This file contains malicious column/field names that attempt to inject
+  PHP code into generated template files.
+
+  EXPECTED BEHAVIOR (with fix):
+  - All special characters should be stripped from variable names
+  - Generated PHP code should be safe and syntactically correct
+  - Labels should be sanitized (no XSS possible)
+
+  VULNERABLE BEHAVIOR (without fix):
+  - Malicious code could be injected into generated PHP templates
+  - When templates are rendered, arbitrary PHP code would execute
+-->
+<products>
+    <product>
+        <!-- Normal fields -->
+        <id>1</id>
+        <name>Safe Product</name>
+        <price>29.99</price>
+
+        <!-- Attempted PHP injection via field names -->
+        <!-- These field names try to break out of PHP variable assignment -->
+        <foo"; system("whoami");//>injection1</foo"; system("whoami");//>
+        <bar`whoami`>injection2</bar`whoami`>
+        <test$(id)>injection3</test$(id)>
+
+        <!-- Attempted variable name manipulation -->
+        <__proto__>prototype_pollution</__proto__>
+        <constructor>constructor_attack</constructor>
+
+        <!-- XSS attempts in field names (for labels) -->
+        <script_alert_1>xss_test1</script_alert_1>
+        <img_onerror_alert>xss_test2</img_onerror_alert>
+        <onload_evil>xss_test3</onload_evil>
+
+        <!-- SQL injection patterns in field names -->
+        <id; DROP TABLE users;-->sql_inject1</id; DROP TABLE users;-->
+        <name' OR '1'='1>sql_inject2</name' OR '1'='1>
+
+        <!-- Path traversal attempts -->
+        <../../etc/passwd>path_traversal</../../etc/passwd>
+        <..\..\windows\system32>windows_path</..\..\windows\system32>
+
+        <!-- Null byte injection -->
+        <field%00.php>null_byte</field%00.php>
+
+        <!-- Unicode attacks -->
+        <fieldＳＣＲＩＰＴ>unicode_script</fieldＳＣＲＩＰＴ>
+    </product>
+
+    <product>
+        <id>2</id>
+        <name>Another Product</name>
+        <price>49.99</price>
+        <normal_field>This is safe</normal_field>
+    </product>
+</products>
