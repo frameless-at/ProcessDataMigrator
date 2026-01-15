@@ -1,60 +1,61 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Code Injection Test File
-  ========================
-  This file contains malicious column/field names that attempt to inject
-  PHP code into generated template files.
+  Code Injection Test File (Valid XML)
+  =====================================
+  XML element names are restricted - they can only contain letters, digits,
+  hyphens, underscores, and periods. So most injection attacks are not
+  possible via XML element names.
 
-  EXPECTED BEHAVIOR (with fix):
-  - All special characters should be stripped from variable names
-  - Generated PHP code should be safe and syntactically correct
-  - Labels should be sanitized (no XSS possible)
+  This file tests patterns that ARE valid in XML but could still be
+  problematic for template generation.
 
-  VULNERABLE BEHAVIOR (without fix):
-  - Malicious code could be injected into generated PHP templates
-  - When templates are rendered, arbitrary PHP code would execute
+  For more aggressive injection tests, use code-injection-test.json
 -->
 <products>
     <product>
         <!-- Normal fields -->
         <id>1</id>
-        <name>Safe Product</name>
+        <name>Test Product</name>
         <price>29.99</price>
 
-        <!-- Attempted PHP injection via field names -->
-        <!-- These field names try to break out of PHP variable assignment -->
-        <foo"; system("whoami");//>injection1</foo"; system("whoami");//>
-        <bar`whoami`>injection2</bar`whoami`>
-        <test$(id)>injection3</test$(id)>
+        <!-- Valid XML names that test edge cases -->
+        <_private>underscore_prefix</_private>
+        <__proto__>prototype_pollution_attempt</__proto__>
+        <constructor>constructor_test</constructor>
 
-        <!-- Attempted variable name manipulation -->
-        <__proto__>prototype_pollution</__proto__>
-        <constructor>constructor_attack</constructor>
+        <!-- Names starting with numbers (prefixed to be valid XML) -->
+        <field123>numeric_suffix</field123>
+        <field.nested.deep>dot_notation</field.nested.deep>
 
-        <!-- XSS attempts in field names (for labels) -->
-        <script_alert_1>xss_test1</script_alert_1>
-        <img_onerror_alert>xss_test2</img_onerror_alert>
-        <onload_evil>xss_test3</onload_evil>
+        <!-- Very long field names -->
+        <thisIsAVeryLongFieldNameThatMightCauseIssuesWithVariableNamingOrDisplayInTheUserInterface>long_name_test</thisIsAVeryLongFieldNameThatMightCauseIssuesWithVariableNamingOrDisplayInTheUserInterface>
 
-        <!-- SQL injection patterns in field names -->
-        <id; DROP TABLE users;-->sql_inject1</id; DROP TABLE users;-->
-        <name' OR '1'='1>sql_inject2</name' OR '1'='1>
+        <!-- Reserved PHP words -->
+        <class>php_reserved_class</class>
+        <function>php_reserved_function</function>
+        <return>php_reserved_return</return>
+        <echo>php_reserved_echo</echo>
+        <if>php_reserved_if</if>
+        <else>php_reserved_else</else>
+        <while>php_reserved_while</while>
+        <for>php_reserved_for</for>
+        <foreach>php_reserved_foreach</foreach>
+        <public>php_reserved_public</public>
+        <private>php_reserved_private</private>
+        <static>php_reserved_static</static>
+        <null>php_reserved_null</null>
+        <true>php_reserved_true</true>
+        <false>php_reserved_false</false>
 
-        <!-- Path traversal attempts -->
-        <../../etc/passwd>path_traversal</../../etc/passwd>
-        <..\..\windows\system32>windows_path</..\..\windows\system32>
-
-        <!-- Null byte injection -->
-        <field%00.php>null_byte</field%00.php>
-
-        <!-- Unicode attacks -->
-        <fieldＳＣＲＩＰＴ>unicode_script</fieldＳＣＲＩＰＴ>
+        <!-- Hyphenated names (valid XML, invalid PHP variable) -->
+        <field-with-hyphens>hyphen_test</field-with-hyphens>
+        <my-field-name>another_hyphen</my-field-name>
     </product>
 
     <product>
         <id>2</id>
-        <name>Another Product</name>
+        <name>Second Product</name>
         <price>49.99</price>
-        <normal_field>This is safe</normal_field>
+        <description>Normal product description</description>
     </product>
 </products>

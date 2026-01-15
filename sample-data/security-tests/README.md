@@ -23,16 +23,38 @@ Tests the **XXE (XML External Entity)** vulnerability fix in `XmlParser.php`.
 
 ---
 
-### 2. code-injection-test.xml
-Tests the **Code Injection** fix in `TemplateCreator.php`.
+### 2. code-injection-test.xml (Valid XML Edge Cases)
+Tests edge cases with valid XML element names in `TemplateCreator.php`.
+
+**Note:** XML element names have strict rules - they cannot contain characters like
+`"`, `'`, `;`, `(`, `)`. Most injection attacks are naturally blocked by XML parsing.
+
+**Test Cases:**
+- Reserved PHP keywords as field names (`class`, `function`, `return`, etc.)
+- Prototype pollution attempts (`__proto__`, `constructor`)
+- Hyphenated names (valid XML, invalid PHP variable)
+- Dot notation for nested fields
+- Very long field names
+
+**How to Test:**
+1. Upload `code-injection-test.xml` via the Data Migrator
+2. Check that reserved keywords are handled properly
+3. Verify hyphenated names are converted to valid PHP variable names
+
+---
+
+### 3. code-injection-test.json (Aggressive Injection Tests)
+Tests the **Code Injection** fix with JSON (which allows any characters in keys).
 
 **Attack Vectors:**
 - PHP code in field names: `foo"; system("whoami");//`
-- Shell commands: `bar\`whoami\``
-- SQL injection patterns: `id; DROP TABLE users;--`
-- XSS in labels: `<script>alert(1)</script>`
-- Path traversal: `../../etc/passwd`
-- Null byte injection: `field%00.php`
+- Shell command injection: `` bar`whoami` ``
+- SQL injection patterns: `'; DROP TABLE users; --`
+- XSS attempts: `<script>alert('xss')</script>`
+- Path traversal: `../../../etc/passwd`
+- Null byte injection: `field\0.php`
+- PHP tag injection: `<?php phpinfo(); ?>`
+- Template injection: `{{7*7}}`
 
 **Expected Behavior (Fixed):**
 - All special characters stripped from variable names
@@ -41,10 +63,10 @@ Tests the **Code Injection** fix in `TemplateCreator.php`.
 - Labels are sanitized
 
 **How to Test:**
-1. Upload `code-injection-test.xml` via the Data Migrator
+1. Upload `code-injection-test.json` via the Data Migrator
 2. Proceed through the analysis and migration
 3. Inspect the generated template files in `/site/templates/`
-4. Verify that variable names are sanitized (e.g., `$fooSystemWhoami` becomes `$foosystemwhoami` or similar safe name)
+4. Verify that variable names contain only alphanumeric characters and underscores
 5. Check that the generated PHP code is syntactically valid
 
 ---
@@ -56,10 +78,6 @@ Tests the **Code Injection** fix in `TemplateCreator.php`.
 # 1. Go to Setup > Data Migrator
 # 2. Upload each test file
 # 3. Verify expected behavior
-
-# Automated testing (if PHPUnit is available):
-# cd /path/to/processwire
-# vendor/bin/phpunit tests/security/
 ```
 
 ## Security Fixes Applied
