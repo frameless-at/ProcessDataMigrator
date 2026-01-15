@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Code Injection Test File (Valid XML)
+  =====================================
+  XML element names are restricted - they can only contain letters, digits,
+  hyphens, underscores, and periods. So most injection attacks are not
+  possible via XML element names.
+
+  This file tests patterns that ARE valid in XML but could still be
+  problematic for template generation.
+
+  For more aggressive injection tests, use code-injection-test.json
+-->
+<products>
+    <product>
+        <!-- Normal fields -->
+        <id>1</id>
+        <name>Test Product</name>
+        <price>29.99</price>
+
+        <!-- Valid XML names that test edge cases -->
+        <_private>underscore_prefix</_private>
+        <__proto__>prototype_pollution_attempt</__proto__>
+        <constructor>constructor_test</constructor>
+
+        <!-- Names starting with numbers (prefixed to be valid XML) -->
+        <field123>numeric_suffix</field123>
+        <field.nested.deep>dot_notation</field.nested.deep>
+
+        <!-- Very long field names -->
+        <thisIsAVeryLongFieldNameThatMightCauseIssuesWithVariableNamingOrDisplayInTheUserInterface>long_name_test</thisIsAVeryLongFieldNameThatMightCauseIssuesWithVariableNamingOrDisplayInTheUserInterface>
+
+        <!-- Reserved PHP words -->
+        <class>php_reserved_class</class>
+        <function>php_reserved_function</function>
+        <return>php_reserved_return</return>
+        <echo>php_reserved_echo</echo>
+        <if>php_reserved_if</if>
+        <else>php_reserved_else</else>
+        <while>php_reserved_while</while>
+        <for>php_reserved_for</for>
+        <foreach>php_reserved_foreach</foreach>
+        <public>php_reserved_public</public>
+        <private>php_reserved_private</private>
+        <static>php_reserved_static</static>
+        <null>php_reserved_null</null>
+        <true>php_reserved_true</true>
+        <false>php_reserved_false</false>
+
+        <!-- Hyphenated names (valid XML, invalid PHP variable) -->
+        <field-with-hyphens>hyphen_test</field-with-hyphens>
+        <my-field-name>another_hyphen</my-field-name>
+    </product>
+
+    <product>
+        <id>2</id>
+        <name>Second Product</name>
+        <price>49.99</price>
+        <description>Normal product description</description>
+    </product>
+</products>

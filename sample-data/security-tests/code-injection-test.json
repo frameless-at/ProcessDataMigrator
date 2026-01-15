@@ -1,0 +1,61 @@
+{
+  "_comment": "Code Injection Test File - JSON allows any characters in keys",
+  "products": [
+    {
+      "id": 1,
+      "name": "Normal Product",
+      "price": 29.99,
+
+      "foo\"; system(\"whoami\");//": "php_injection_attempt",
+      "bar`whoami`": "shell_injection_attempt",
+      "test$(id)": "command_substitution",
+      "${PATH}": "env_variable_injection",
+
+      "'; DROP TABLE users; --": "sql_injection_1",
+      "\" OR \"1\"=\"1": "sql_injection_2",
+
+      "<script>alert('xss')</script>": "xss_attempt_1",
+      "<img onerror=alert(1)>": "xss_attempt_2",
+      "javascript:alert(1)": "xss_attempt_3",
+
+      "../../../etc/passwd": "path_traversal_1",
+      "..\\..\\windows\\system32": "path_traversal_2",
+      "/etc/shadow": "absolute_path",
+
+      "field\u0000.php": "null_byte_injection",
+      "field%00test": "url_encoded_null",
+
+      "__proto__": "prototype_pollution",
+      "constructor": "constructor_hijack",
+      "toString": "tostring_override",
+
+      "class": "php_reserved",
+      "function": "php_reserved",
+      "return": "php_reserved",
+      "echo": "php_reserved",
+      "eval": "php_reserved",
+      "exec": "php_reserved",
+      "system": "php_reserved",
+      "shell_exec": "php_reserved",
+      "passthru": "php_reserved",
+
+      "<?php phpinfo(); ?>": "php_tag_injection",
+      "<?= system('id') ?>": "short_tag_injection",
+
+      "{{7*7}}": "template_injection_1",
+      "${7*7}": "template_injection_2",
+      "#{7*7}": "template_injection_3",
+
+      "field-with-hyphens": "valid_but_invalid_php_var",
+      "field with spaces": "spaces_in_name",
+      "field\twith\ttabs": "tabs_in_name",
+      "field\nwith\nnewlines": "newlines_in_name"
+    },
+    {
+      "id": 2,
+      "name": "Safe Product",
+      "price": 49.99,
+      "description": "This is a normal product"
+    }
+  ]
+}

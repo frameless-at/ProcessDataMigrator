@@ -656,22 +656,32 @@ PHP;
 
     /**
      * Generate clean variable name from column name
+     * SECURITY: Uses ProcessWire sanitizer to prevent code injection
      */
     protected function generateVarName($columnName) {
-        // CRITICAL: Replace dots with underscores FIRST
-        // JSON/XML parsers flatten nested objects using dot notation (e.g., "shipping_address.street")
-        // PHP doesn't allow dots in variable names, so convert to underscores
+        $sanitizer = $this->wire('sanitizer');
+
+        // Replace dots with underscores first (for nested JSON/XML fields)
         $name = str_replace('.', '_', $columnName);
+
+        // Use PW sanitizer->name() - allows a-z, 0-9, underscore, hyphen
+        // Then remove hyphens (not valid in PHP variable names)
+        $name = str_replace('-', '_', $sanitizer->name($name));
 
         // Remove common prefixes/suffixes
         $name = preg_replace('/^(field_|tbl_|db_)/', '', $name);
         $name = preg_replace('/(_id|_key|_fk)$/', '', $name);
 
-        // Convert to camelCase
+        // Convert to camelCase for PHP variable style
         $parts = explode('_', $name);
         $camelCase = array_shift($parts);
         foreach ($parts as $part) {
             $camelCase .= ucfirst($part);
+        }
+
+        // Ensure result starts with letter or underscore (valid PHP variable)
+        if ($camelCase && !preg_match('/^[a-zA-Z_]/', $camelCase)) {
+            $camelCase = 'field' . ucfirst($camelCase);
         }
 
         return $camelCase ?: 'value';
@@ -679,12 +689,17 @@ PHP;
 
     /**
      * Sanitize label for display
+     * SECURITY: Uses ProcessWire sanitizer for safe output
      */
     protected function sanitizeLabel($columnName) {
-        // Convert dots to spaces (for nested JSON/XML fields)
-        $label = str_replace('.', ' ', $columnName);
-        // Convert underscores to spaces
-        $label = str_replace('_', ' ', $label);
+        $sanitizer = $this->wire('sanitizer');
+
+        // Use PW sanitizer->text() to strip dangerous content
+        $label = $sanitizer->text($columnName);
+
+        // Convert dots and underscores to spaces for readability
+        $label = str_replace(['.', '_'], ' ', $label);
+
         return ucwords($label);
     }
 
