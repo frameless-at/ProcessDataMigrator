@@ -62,6 +62,12 @@ class ProcessDataMigrator extends Process implements Module, ConfigurableModule 
     const SESSION_KEY = 'DataMigrator';
 
     /**
+     * Maximum file upload size in bytes (50 MB)
+     * SECURITY: Prevents resource exhaustion attacks via large file uploads
+     */
+    const MAX_FILE_SIZE = 52428800;
+
+    /**
      * Initialize the module
      */
     public function init() {
@@ -185,6 +191,10 @@ class ProcessDataMigrator extends Process implements Module, ConfigurableModule 
                 $this->error($this->_('File upload failed'));
             } else if ($file['size'] === 0) {
                 $this->error($this->_('File is empty'));
+            } else if ($file['size'] > self::MAX_FILE_SIZE) {
+                // SECURITY: Prevent resource exhaustion attacks via large file uploads
+                $maxMb = round(self::MAX_FILE_SIZE / 1048576);
+                $this->error(sprintf($this->_('File size exceeds maximum allowed size of %d MB'), $maxMb));
             } else if (!preg_match('/\.(sql|csv|json|xml)$/i', $file['name'])) {
                 $this->error($this->_('Only .sql, .csv, .json, and .xml files are allowed'));
             } else {

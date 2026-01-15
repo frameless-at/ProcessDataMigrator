@@ -37,9 +37,25 @@ class XmlParser extends AbstractParser {
             return false;
         }
 
-        // Try to load XML
+        // Try to load XML with XXE protection
         libxml_use_internal_errors(true);
-        $xml = simplexml_load_file($file);
+
+        // SECURITY: Disable external entity loading to prevent XXE attacks
+        // For PHP < 8.0, we need to explicitly disable entity loader
+        // For PHP 8.0+, external entities are disabled by default but we use safe flags anyway
+        $previousEntityLoader = null;
+        if (PHP_VERSION_ID < 80000) {
+            $previousEntityLoader = libxml_disable_entity_loader(true);
+        }
+
+        // LIBXML_NONET prevents network access, LIBXML_NOENT substitutes entities (safe when loader disabled)
+        $xml = simplexml_load_file($file, 'SimpleXMLElement', LIBXML_NONET);
+
+        // Restore previous entity loader state
+        if (PHP_VERSION_ID < 80000 && $previousEntityLoader !== null) {
+            libxml_disable_entity_loader($previousEntityLoader);
+        }
+
         libxml_clear_errors();
 
         return $xml !== false;
@@ -66,7 +82,20 @@ class XmlParser extends AbstractParser {
         $recordXpath = $options['record_xpath'] ?? null;
 
         libxml_use_internal_errors(true);
-        $xml = simplexml_load_file($file);
+
+        // SECURITY: Disable external entity loading to prevent XXE attacks
+        $previousEntityLoader = null;
+        if (PHP_VERSION_ID < 80000) {
+            $previousEntityLoader = libxml_disable_entity_loader(true);
+        }
+
+        // LIBXML_NONET prevents network access during parsing
+        $xml = simplexml_load_file($file, 'SimpleXMLElement', LIBXML_NONET);
+
+        // Restore previous entity loader state
+        if (PHP_VERSION_ID < 80000 && $previousEntityLoader !== null) {
+            libxml_disable_entity_loader($previousEntityLoader);
+        }
 
         if ($xml === false) {
             $errors = libxml_get_errors();

@@ -656,12 +656,17 @@ PHP;
 
     /**
      * Generate clean variable name from column name
+     * SECURITY: Strictly sanitizes to prevent code injection in generated templates
      */
     protected function generateVarName($columnName) {
-        // CRITICAL: Replace dots with underscores FIRST
+        // SECURITY: First, strip any characters that are not alphanumeric, underscores, or dots
+        // This prevents code injection attacks via specially crafted column names
+        $name = preg_replace('/[^a-zA-Z0-9_.]/', '', $columnName);
+
+        // CRITICAL: Replace dots with underscores
         // JSON/XML parsers flatten nested objects using dot notation (e.g., "shipping_address.street")
         // PHP doesn't allow dots in variable names, so convert to underscores
-        $name = str_replace('.', '_', $columnName);
+        $name = str_replace('.', '_', $name);
 
         // Remove common prefixes/suffixes
         $name = preg_replace('/^(field_|tbl_|db_)/', '', $name);
@@ -674,17 +679,29 @@ PHP;
             $camelCase .= ucfirst($part);
         }
 
+        // SECURITY: Ensure result is a valid PHP variable name
+        // Must start with letter or underscore, not a number
+        if ($camelCase && !preg_match('/^[a-zA-Z_]/', $camelCase)) {
+            $camelCase = 'field_' . $camelCase;
+        }
+
         return $camelCase ?: 'value';
     }
 
     /**
      * Sanitize label for display
+     * SECURITY: Strips potentially dangerous characters and escapes HTML
      */
     protected function sanitizeLabel($columnName) {
+        // SECURITY: First, strip any characters that could be dangerous
+        // Only allow alphanumeric, spaces, underscores, dots, and hyphens
+        $label = preg_replace('/[^a-zA-Z0-9\s_.\-]/', '', $columnName);
+
         // Convert dots to spaces (for nested JSON/XML fields)
-        $label = str_replace('.', ' ', $columnName);
+        $label = str_replace('.', ' ', $label);
         // Convert underscores to spaces
         $label = str_replace('_', ' ', $label);
+
         return ucwords($label);
     }
 
