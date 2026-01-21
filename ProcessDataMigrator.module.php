@@ -34,7 +34,7 @@ class ProcessDataMigrator extends Process implements Module, ConfigurableModule 
             'summary' => 'Migrate external data (SQL, CSV, JSON, XML) into ProcessWire',
             'version' => '1.1.1',
             'author' => 'ProcessWire',
-            'icon' => 'exchange',
+            'icon' => 'upload',
             'permission' => 'data-migrate',
             'permissions' => [
                 'data-migrate' => 'Migrate external data into ProcessWire'
