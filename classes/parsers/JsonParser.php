@@ -65,6 +65,7 @@ class JsonParser extends AbstractParser {
 
         $tableName = $options['table_name'] ?? pathinfo($file, PATHINFO_FILENAME);
         $sampleSize = $options['sample_size'] ?? 100;
+        $maxRows = $options['max_rows'] ?? 0; // 0 = unlimited
 
         $content = file_get_contents($file);
         if ($content === false) {
@@ -79,7 +80,8 @@ class JsonParser extends AbstractParser {
         }
 
         // Determine JSON structure and extract tables
-        $this->extractTables($data, $tableName, $sampleSize);
+        // FIX: Pass maxRows for data limiting (sampleSize is only for analysis)
+        $this->extractTables($data, $tableName, $maxRows);
 
         // Build metadata
         $totalRows = 0;
@@ -100,11 +102,12 @@ class JsonParser extends AbstractParser {
 
     /**
      * Extract tables from JSON data
+     * @param int $maxRows Maximum rows to store (0 = unlimited)
      */
-    protected function extractTables($data, $defaultTableName, $sampleSize) {
+    protected function extractTables($data, $defaultTableName, $maxRows) {
         // Case 1: Array of objects [{...}, {...}]
         if ($this->isArrayOfObjects($data)) {
-            $this->createTableFromArray($defaultTableName, $data, $sampleSize);
+            $this->createTableFromArray($defaultTableName, $data, $maxRows);
             return;
         }
 
@@ -112,10 +115,10 @@ class JsonParser extends AbstractParser {
         if (is_array($data) && !$this->isSequentialArray($data)) {
             foreach ($data as $key => $value) {
                 if ($this->isArrayOfObjects($value)) {
-                    $this->createTableFromArray($key, $value, $sampleSize);
+                    $this->createTableFromArray($key, $value, $maxRows);
                 } elseif (is_array($value) && $this->isSequentialArray($value)) {
                     // Simple array - convert to objects with single column
-                    $this->createTableFromSimpleArray($key, $value, $sampleSize);
+                    $this->createTableFromSimpleArray($key, $value, $maxRows);
                 }
             }
             return;
@@ -123,7 +126,7 @@ class JsonParser extends AbstractParser {
 
         // Case 3: Single object {...}
         if (is_array($data) && !$this->isSequentialArray($data)) {
-            $this->createTableFromArray($defaultTableName, [$data], $sampleSize);
+            $this->createTableFromArray($defaultTableName, [$data], $maxRows);
             return;
         }
 
@@ -133,8 +136,9 @@ class JsonParser extends AbstractParser {
     /**
      * Create table from array of objects
      * Also extracts nested arrays as separate child tables with FK relations
+     * @param int $maxRows Maximum rows to store (0 = unlimited)
      */
-    protected function createTableFromArray($tableName, $array, $sampleSize) {
+    protected function createTableFromArray($tableName, $array, $maxRows) {
         if (empty($array)) {
             return;
         }
@@ -180,15 +184,16 @@ class JsonParser extends AbstractParser {
                 }
             }
 
-            // Stop at sample size for structure detection
-            if (count($flattenedData) >= $sampleSize) {
+            // FIX: Stop at max_rows (0 = unlimited), NOT sample_size
+            // sample_size limiting is done in DataAnalyzer
+            if ($maxRows > 0 && count($flattenedData) >= $maxRows) {
                 break;
             }
         }
 
         // Create child tables from extracted arrays
         foreach ($childArrays as $childName => $childData) {
-            $this->createChildTable($tableName, $childName, $childData, $sampleSize);
+            $this->createChildTable($tableName, $childName, $childData, $maxRows);
         }
 
         // Build structure
@@ -224,8 +229,9 @@ class JsonParser extends AbstractParser {
 
     /**
      * Create table from simple array
+     * @param int $maxRows Maximum rows to store (0 = unlimited)
      */
-    protected function createTableFromSimpleArray($tableName, $array, $sampleSize) {
+    protected function createTableFromSimpleArray($tableName, $array, $maxRows) {
         $data = [];
         $count = 0;
 
@@ -236,7 +242,8 @@ class JsonParser extends AbstractParser {
             ];
 
             $count++;
-            if ($count >= $sampleSize) {
+            // FIX: Stop at max_rows (0 = unlimited)
+            if ($maxRows > 0 && $count >= $maxRows) {
                 break;
             }
         }
@@ -369,9 +376,9 @@ class JsonParser extends AbstractParser {
      * @param string $parentTable Parent table name
      * @param string $childName Child array name (e.g., "items")
      * @param array $childData Array of child objects with parent_id
-     * @param int $sampleSize Sample size for analysis
+     * @param int $maxRows Maximum rows to store (0 = unlimited)
      */
-    protected function createChildTable($parentTable, $childName, $childData, $sampleSize) {
+    protected function createChildTable($parentTable, $childName, $childData, $maxRows) {
         if (empty($childData)) {
             return;
         }
@@ -410,7 +417,8 @@ class JsonParser extends AbstractParser {
                 }
             }
 
-            if (count($flattenedData) >= $sampleSize) {
+            // FIX: Stop at max_rows (0 = unlimited)
+            if ($maxRows > 0 && count($flattenedData) >= $maxRows) {
                 break;
             }
         }

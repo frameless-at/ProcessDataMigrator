@@ -73,6 +73,7 @@ class CsvParser extends AbstractParser {
         $hasHeader = $options['has_header'] ?? true;
         $tableName = $options['table_name'] ?? pathinfo($file, PATHINFO_FILENAME);
         $sampleSize = $options['sample_size'] ?? 100;
+        $maxRows = $options['max_rows'] ?? 0; // 0 = unlimited
 
         // Auto-detect delimiter if not specified
         if ($delimiter === null) {
@@ -130,9 +131,10 @@ class CsvParser extends AbstractParser {
 
             $rowCount++;
 
-            // Stop at sample size
-            if ($sampleSize > 0 && count($data) >= $sampleSize) {
-                // Continue counting total rows
+            // FIX: Stop at max_rows (0 = unlimited), NOT sample_size
+            // sample_size is only for ANALYSIS (type detection in DataAnalyzer)
+            if ($maxRows > 0 && count($data) >= $maxRows) {
+                // Continue counting total rows for metadata
                 while (fgets($handle) !== false) {
                     $rowCount++;
                 }

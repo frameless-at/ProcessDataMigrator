@@ -477,10 +477,11 @@ class SqlParser extends AbstractParser {
             return;
         }
 
-        // CRITICAL: Check SAMPLE SIZE limit, not max_rows
-        // max_rows only limits IMPORT, not ANALYSIS
-        // We need enough data for accurate type detection
-        if ($sampleSize > 0 && $this->tables[$tableName]['row_count'] >= $sampleSize) {
+        // FIX: Limit based on max_rows (0 = unlimited), NOT sample_size!
+        // sample_size is only for ANALYSIS (type detection), not for data storage.
+        // DataAnalyzer will use array_slice() to limit analysis to sample_size.
+        // Here we need to read ALL data (up to max_rows) for import.
+        if ($maxRows > 0 && $this->tables[$tableName]['row_count'] >= $maxRows) {
             return;
         }
 
@@ -511,14 +512,13 @@ class SqlParser extends AbstractParser {
         $rows = $this->parseInsertStatement($sql, $tableName);
 
         foreach ($rows as $row) {
-            // Store rows up to sample_size for analysis
-            if ($this->tables[$tableName]['row_count'] < $sampleSize) {
-                $this->tables[$tableName]['data'][] = $row;
-            }
+            // FIX: Store ALL rows (up to max_rows limit)
+            // sample_size limiting is done in DataAnalyzer, not here
+            $this->tables[$tableName]['data'][] = $row;
             $this->tables[$tableName]['row_count']++;
 
-            // Stop when we have enough data for analysis
-            if ($sampleSize > 0 && $this->tables[$tableName]['row_count'] >= $sampleSize) {
+            // Stop only when max_rows limit is reached (0 = unlimited)
+            if ($maxRows > 0 && $this->tables[$tableName]['row_count'] >= $maxRows) {
                 break;
             }
         }

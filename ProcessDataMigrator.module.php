@@ -134,6 +134,17 @@ class ProcessDataMigrator extends Process implements Module, ConfigurableModule 
                     }
                 }
 
+                // Store title field overrides
+                $titleFields = isset($_POST['title_field']) ? $_POST['title_field'] : null;
+                if ($titleFields && is_array($titleFields)) {
+                    $sessionData['title_field_overrides'] = [];
+                    foreach ($titleFields as $tableName => $titleField) {
+                        if (!empty($titleField)) {
+                            $sessionData['title_field_overrides'][$tableName] = $titleField;
+                        }
+                    }
+                }
+
                 $this->session->set(self::SESSION_KEY, $sessionData);
 
                 // Route to dry run or actual import
@@ -186,9 +197,22 @@ class ProcessDataMigrator extends Process implements Module, ConfigurableModule 
 
             $file = $_FILES['sql_file'];
 
-            // Validate upload
+            // Validate upload with specific error messages
             if ($file['error'] !== UPLOAD_ERR_OK) {
-                $this->error($this->_('File upload failed'));
+                $uploadErrors = [
+                    UPLOAD_ERR_INI_SIZE => sprintf(
+                        $this->_('File exceeds PHP upload_max_filesize limit (%s). Please increase this value in php.ini or contact your administrator.'),
+                        ini_get('upload_max_filesize')
+                    ),
+                    UPLOAD_ERR_FORM_SIZE => $this->_('File exceeds maximum allowed form size'),
+                    UPLOAD_ERR_PARTIAL => $this->_('File was only partially uploaded. Please try again.'),
+                    UPLOAD_ERR_NO_FILE => $this->_('No file was selected for upload'),
+                    UPLOAD_ERR_NO_TMP_DIR => $this->_('Server configuration error: Missing temporary folder'),
+                    UPLOAD_ERR_CANT_WRITE => $this->_('Server error: Failed to write file to disk'),
+                    UPLOAD_ERR_EXTENSION => $this->_('A PHP extension stopped the file upload'),
+                ];
+                $errorMessage = $uploadErrors[$file['error']] ?? $this->_('File upload failed (unknown error)');
+                $this->error($errorMessage);
             } else if ($file['size'] === 0) {
                 $this->error($this->_('File is empty'));
             } else if ($file['size'] > self::MAX_FILE_SIZE) {
@@ -520,10 +544,48 @@ class ProcessDataMigrator extends Process implements Module, ConfigurableModule 
             $out .= '<dd><code>' . $this->sanitizer->entities($analysis['suggested_template']) . '</code></dd>';
         }
 
-        if ($analysis['suggested_title_field']) {
-            $out .= '<dt>' . $this->_('Suggested Title Field') . ':</dt>';
-            $out .= '<dd><code>' . $this->sanitizer->entities($analysis['suggested_title_field']) . '</code></dd>';
+        // Title field selector - allow manual selection
+        $out .= '<dt>' . $this->_('Title Field') . ':</dt>';
+        $out .= '<dd>';
+
+        // Get current selection from session or use suggested
+        $currentTitleField = $sessionData['title_field_overrides'][$tableName]
+            ?? $analysis['suggested_title_field']
+            ?? null;
+
+        // Build dropdown with all non-ID columns
+        $out .= '<select name="title_field[' . $this->sanitizer->entities($tableName) . ']" class="uk-select" style="width: auto; min-width: 200px;">';
+
+        if (!$currentTitleField) {
+            $out .= '<option value="">-- ' . $this->_('Please select') . ' --</option>';
         }
+
+        foreach ($analysis['columns'] as $column) {
+            // Skip ID fields
+            if ($column['is_likely_id']) continue;
+
+            $selected = ($column['name'] === $currentTitleField) ? ' selected' : '';
+            $label = $this->sanitizer->entities($column['name']);
+
+            // Add type hint
+            $typeHint = $column['base_type'] ?? 'unknown';
+            $label .= ' (' . $typeHint . ')';
+
+            // Mark suggested field
+            if ($column['name'] === $analysis['suggested_title_field']) {
+                $label .= ' *';
+            }
+
+            $out .= '<option value="' . $this->sanitizer->entities($column['name']) . '"' . $selected . '>' . $label . '</option>';
+        }
+
+        $out .= '</select>';
+
+        if (!$currentTitleField) {
+            $out .= ' <span style="color: #c00; font-weight: bold;">' . $this->_('Required!') . '</span>';
+        }
+
+        $out .= '</dd>';
 
         $out .= '</dl>';
 
@@ -932,8 +994,10 @@ class ProcessDataMigrator extends Process implements Module, ConfigurableModule 
             }
 
             // Create mapping to see what would be created
+            // Use title field override if user selected one
+            $titleFieldOverride = $sessionData['title_field_overrides'][$tableName] ?? null;
             $mappingEngine = $this->wire(new MappingEngine());
-            $mapping = $mappingEngine->createMapping($analysis, $tableName);
+            $mapping = $mappingEngine->createMapping($analysis, $tableName, $titleFieldOverride);
 
             // Apply field filtering
             if (isset($sessionData['selected_fields'])) {
@@ -1079,8 +1143,10 @@ class ProcessDataMigrator extends Process implements Module, ConfigurableModule 
                 $this->message($this->_("Migrating table: {$tableName}"));
 
                 // Step 1: Create automatic mapping
+                // Use title field override if user selected one
+                $titleFieldOverride = $sessionData['title_field_overrides'][$tableName] ?? null;
                 $mappingEngine = $this->wire(new MappingEngine());
-                $mapping = $mappingEngine->createMapping($analysis, $tableName);
+                $mapping = $mappingEngine->createMapping($analysis, $tableName, $titleFieldOverride);
 
                 // Filter mapping to only include selected fields (if field selection was used)
                 if (isset($sessionData['selected_fields'])) {

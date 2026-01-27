@@ -79,6 +79,7 @@ class XmlParser extends AbstractParser {
 
         $tableName = $options['table_name'] ?? null;
         $sampleSize = $options['sample_size'] ?? 100;
+        $maxRows = $options['max_rows'] ?? 0; // 0 = unlimited
         $recordXpath = $options['record_xpath'] ?? null;
 
         libxml_use_internal_errors(true);
@@ -132,7 +133,9 @@ class XmlParser extends AbstractParser {
         $allKeys = [];
 
         foreach ($records as $index => $record) {
-            if ($index >= $sampleSize) {
+            // FIX: Stop at max_rows (0 = unlimited), NOT sample_size
+            // sample_size limiting is done in DataAnalyzer
+            if ($maxRows > 0 && $index >= $maxRows) {
                 break;
             }
 
