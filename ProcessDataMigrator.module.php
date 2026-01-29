@@ -553,17 +553,26 @@ class ProcessDataMigrator extends Process implements Module, ConfigurableModule 
             ?? $analysis['suggested_title_field']
             ?? null;
 
-        // Build dropdown with all non-ID columns
+        // Build dropdown - show non-ID columns first, then ID columns as fallback
         $out .= '<select name="title_field[' . $this->sanitizer->entities($tableName) . ']" class="uk-select" style="width: auto; min-width: 200px;">';
 
         if (!$currentTitleField) {
             $out .= '<option value="">-- ' . $this->_('Please select') . ' --</option>';
         }
 
+        // Separate columns into non-ID and ID fields
+        $nonIdColumns = [];
+        $idColumns = [];
         foreach ($analysis['columns'] as $column) {
-            // Skip ID fields
-            if ($column['is_likely_id']) continue;
+            if ($column['is_likely_id']) {
+                $idColumns[] = $column;
+            } else {
+                $nonIdColumns[] = $column;
+            }
+        }
 
+        // First: show non-ID columns (preferred)
+        foreach ($nonIdColumns as $column) {
             $selected = ($column['name'] === $currentTitleField) ? ' selected' : '';
             $label = $this->sanitizer->entities($column['name']);
 
@@ -577,6 +586,21 @@ class ProcessDataMigrator extends Process implements Module, ConfigurableModule 
             }
 
             $out .= '<option value="' . $this->sanitizer->entities($column['name']) . '"' . $selected . '>' . $label . '</option>';
+        }
+
+        // Then: show ID columns as fallback (for junction tables etc.)
+        if (!empty($idColumns)) {
+            if (!empty($nonIdColumns)) {
+                $out .= '<option disabled>───────────────</option>';
+            }
+            foreach ($idColumns as $column) {
+                $selected = ($column['name'] === $currentTitleField) ? ' selected' : '';
+                $label = $this->sanitizer->entities($column['name']);
+                $typeHint = $column['base_type'] ?? 'unknown';
+                $label .= ' (' . $typeHint . ', ID)';
+
+                $out .= '<option value="' . $this->sanitizer->entities($column['name']) . '"' . $selected . '>' . $label . '</option>';
+            }
         }
 
         $out .= '</select>';
