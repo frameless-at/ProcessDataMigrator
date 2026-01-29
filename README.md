@@ -224,6 +224,20 @@ If tables have circular references (A → B → C → A), the module will detect
 
 ---
 
+## Changelog
+
+### Version 1.1.2
+
+**Bug Fixes:**
+
+- **Fixed version detection** — ProcessWire now correctly recognizes module updates (`.info.json` was out of sync)
+- **Fixed sample_size vs max_rows confusion** — Critical fix: `sample_size` now only affects type detection analysis, while `max_rows` correctly limits the actual import. Previously, setting `sample_size=100` and `max_rows=0` would only import 100 rows instead of all rows.
+- **Added specific upload error messages** — File upload errors now show the actual cause (e.g., "File exceeds PHP upload_max_filesize limit (2M)") instead of generic "File upload failed"
+- **Added manual title field selection** — Users can now manually select the title field via dropdown when auto-detection fails or a different field is preferred
+- **Fixed empty title dropdown for junction tables** — Tables with only ID columns (like `wp_term_relationships`) now show ID fields as fallback options in the title dropdown
+
+---
+
 ## License
 
 This module is licensed under the MIT License.
