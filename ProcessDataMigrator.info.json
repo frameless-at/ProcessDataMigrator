@@ -1,7 +1,7 @@
 {
   "title": "Data Migrator",
   "summary": "Migrate external data (SQL, CSV, JSON, XML) into ProcessWire",
-  "version": "1.1.0",
+  "version": "1.1.2",
   "author": "ProcessWire",
   "icon": "upload",
   "permission": "data-migrate",
